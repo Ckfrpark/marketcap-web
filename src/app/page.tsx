@@ -13,6 +13,18 @@ interface RankingItem {
   price_usd: number;
   change_pct: number;
   sparkline_30d: number[];
+  revenue_usd?: number | null;
+  earnings_usd?: number | null;
+  employees?: number | null;
+  pe_ratio?: number | null;
+  dividend_yield?: number | null;
+  operating_margin?: number | null;
+  total_assets_usd?: number | null;
+  total_liabilities_usd?: number | null;
+  net_assets_usd?: number | null;
+  total_debt_usd?: number | null;
+  total_cash_usd?: number | null;
+  pb_ratio?: number | null;
 }
 
 interface DailySnapshot {
@@ -31,6 +43,42 @@ interface HistoryPoint {
 }
 
 type CurrencyCode = 'USD' | 'KRW' | 'EUR' | 'JPY' | 'CNY';
+
+type RankMetricKey =
+  | 'market_cap_usd'
+  | 'earnings_usd'
+  | 'revenue_usd'
+  | 'employees'
+  | 'pe_ratio'
+  | 'dividend_yield'
+  | 'operating_margin'
+  | 'total_assets_usd'
+  | 'net_assets_usd'
+  | 'total_liabilities_usd'
+  | 'total_debt_usd'
+  | 'total_cash_usd'
+  | 'pb_ratio';
+
+const RANK_METRICS: {
+  id: RankMetricKey;
+  label: string;
+  colTitle: string;
+  kind: 'money' | 'int' | 'ratio' | 'pct';
+}[] = [
+  { id: 'market_cap_usd', label: 'Market Cap', colTitle: '시가총액', kind: 'money' },
+  { id: 'earnings_usd', label: 'Earnings', colTitle: '순이익 (Earnings)', kind: 'money' },
+  { id: 'revenue_usd', label: 'Revenue', colTitle: '매출 (Revenue)', kind: 'money' },
+  { id: 'employees', label: 'Employees', colTitle: '임직원 수', kind: 'int' },
+  { id: 'pe_ratio', label: 'P/E ratio', colTitle: 'PER (P/E)', kind: 'ratio' },
+  { id: 'dividend_yield', label: 'Dividend %', colTitle: '배당수익률', kind: 'pct' },
+  { id: 'operating_margin', label: 'Operating Margin', colTitle: '영업이익률', kind: 'pct' },
+  { id: 'total_assets_usd', label: 'Total assets', colTitle: '총자산', kind: 'money' },
+  { id: 'net_assets_usd', label: 'Net assets', colTitle: '순자산', kind: 'money' },
+  { id: 'total_liabilities_usd', label: 'Total liabilities', colTitle: '총부채', kind: 'money' },
+  { id: 'total_debt_usd', label: 'Total debt', colTitle: '총차입금', kind: 'money' },
+  { id: 'total_cash_usd', label: 'Cash on hand', colTitle: '현금성자산', kind: 'money' },
+  { id: 'pb_ratio', label: 'Price to Book', colTitle: 'PBR (P/B)', kind: 'ratio' },
+];
 
 const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   USD: '$',
@@ -75,20 +123,36 @@ function formatMarketCap(
   currency: CurrencyCode,
   fxRates: Record<string, number>
 ): string {
-  const val = convertFromUsd(amountUsd, currency, fxRates);
+  const sign = amountUsd < 0 ? '-' : '';
+  const val = Math.abs(convertFromUsd(amountUsd, currency, fxRates));
   const sym = CURRENCY_SYMBOLS[currency];
 
   if (currency === 'KRW') {
     const jo = val / 1e12;
-    if (jo >= 1) return `${sym}${jo.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}조`;
+    if (jo >= 1) return `${sign}${sym}${jo.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}조`;
     const eok = val / 1e8;
-    return `${sym}${eok.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}억`;
+    return `${sign}${sym}${eok.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}억`;
   }
 
-  if (val >= 999.5e9) return `${sym}${(val / 1e12).toFixed(3)} T`;
-  if (val >= 1e9) return `${sym}${Math.round(val / 1e9).toLocaleString('en-US')} B`;
-  if (val >= 1e6) return `${sym}${(val / 1e6).toFixed(2)} M`;
-  return `${sym}${val.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+  if (val >= 999.5e9) return `${sign}${sym}${(val / 1e12).toFixed(3)} T`;
+  if (val >= 1e9) return `${sign}${sym}${Math.round(val / 1e9).toLocaleString('en-US')} B`;
+  if (val >= 1e6) return `${sign}${sym}${(val / 1e6).toFixed(2)} M`;
+  return `${sign}${sym}${val.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+}
+
+function formatMetricCell(
+  item: RankingItem,
+  metricKey: RankMetricKey,
+  currency: CurrencyCode,
+  fxRates: Record<string, number>
+): string {
+  const raw = item[metricKey];
+  if (raw === null || raw === undefined || Number.isNaN(raw)) return '-';
+  const meta = RANK_METRICS.find((m) => m.id === metricKey)!;
+  if (meta.kind === 'money') return formatMarketCap(raw, currency, fxRates);
+  if (meta.kind === 'int') return `${Math.round(raw).toLocaleString('en-US')}명`;
+  if (meta.kind === 'pct') return `${raw.toFixed(2)}%`;
+  return `${raw.toFixed(2)}x`;
 }
 
 function formatPrice(
@@ -155,7 +219,6 @@ function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
   );
 }
 
-/** 종목 상세 인터랙티브 라인/영역 차트 */
 function DetailedAreaChart({
   points,
   metric,
@@ -296,13 +359,13 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
 
   const [currency, setCurrency] = useState<CurrencyCode>('USD');
+  const [rankBy, setRankBy] = useState<RankMetricKey>('market_cap_usd');
   const [assetFilter, setAssetFilter] = useState<'ALL' | 'STOCK' | 'ETF' | 'CRYPTO'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showTopChart, setShowTopChart] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(250);
 
-  // 종목 상세 그래프 모달 상태
   const [selectedAsset, setSelectedAsset] = useState<RankingItem | null>(null);
   const [chartRange, setChartRange] = useState<30 | 90 | 365 | 3650>(90);
   const [chartMetric, setChartMetric] = useState<'market_cap_usd' | 'price_usd' | 'rank'>('market_cap_usd');
@@ -338,7 +401,6 @@ export default function HomePage() {
     };
   }, [selectedDate]);
 
-  // 종목 클릭 시 과거 R2 일자별 스냅샷에서 시계열 추출
   useEffect(() => {
     if (!selectedAsset) return;
     let cancelled = false;
@@ -382,11 +444,20 @@ export default function HomePage() {
     };
   }, [selectedAsset, chartRange, selectedDate]);
 
+  const activeMetricMeta = useMemo(
+    () => RANK_METRICS.find((m) => m.id === rankBy) || RANK_METRICS[0],
+    [rankBy]
+  );
+
   const filteredRankings = useMemo(() => {
     if (!snapshot) return [];
     const q = searchQuery.trim().toLowerCase();
-    return snapshot.rankings.filter((item) => {
+    const list = snapshot.rankings.filter((item) => {
       if (assetFilter !== 'ALL' && item.asset_type !== assetFilter) return false;
+      if (rankBy !== 'market_cap_usd') {
+        const v = item[rankBy];
+        if (v === null || v === undefined || Number.isNaN(v)) return false;
+      }
       if (!q) return true;
       return (
         item.ticker.toLowerCase().includes(q) ||
@@ -394,7 +465,15 @@ export default function HomePage() {
         item.country_code.toLowerCase().includes(q)
       );
     });
-  }, [snapshot, assetFilter, searchQuery]);
+
+    if (rankBy === 'market_cap_usd') return list;
+
+    return [...list].sort((a, b) => {
+      const va = Number(a[rankBy] ?? -Infinity);
+      const vb = Number(b[rankBy] ?? -Infinity);
+      return vb - va;
+    });
+  }, [snapshot, assetFilter, searchQuery, rankBy]);
 
   const top10ForBarChart = useMemo(() => filteredRankings.slice(0, 10), [filteredRankings]);
   const maxTop10Mcap = top10ForBarChart[0]?.market_cap_usd || 1;
@@ -475,6 +554,29 @@ export default function HomePage() {
             <div className="text-2xl font-bold text-indigo-400 mt-1">
               {snapshot?.date || selectedDate}
             </div>
+          </div>
+        </section>
+
+        {/* Rank by 재무 지표 선택 바 */}
+        <section className="rounded-xl bg-slate-900/90 border border-slate-800 p-3.5 sm:p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-slate-400 mr-1">Rank by</span>
+            {RANK_METRICS.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => {
+                  setRankBy(m.id);
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                  rankBy === m.id
+                    ? 'bg-indigo-600 text-white border-indigo-500 shadow'
+                    : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-600 hover:text-white'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
           </div>
         </section>
 
@@ -620,7 +722,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* 메인 시가총액 순위 테이블 */}
+        {/* 메인 순위 테이블 */}
         <section className="rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shadow-xl">
           {loading ? (
             <div className="py-20 text-center text-sm text-slate-400">
@@ -643,6 +745,11 @@ export default function HomePage() {
                   <tr className="border-b border-slate-800 bg-slate-900/90 text-[11px] uppercase tracking-wider text-slate-400">
                     <th className="py-3.5 px-4 w-16 text-center">순위</th>
                     <th className="py-3.5 px-4">자산명 / 티커 (클릭 시 상세 차트)</th>
+                    {rankBy !== 'market_cap_usd' && (
+                      <th className="py-3.5 px-4 text-right text-indigo-400">
+                        {activeMetricMeta.colTitle}
+                      </th>
+                    )}
                     <th className="py-3.5 px-4 text-right">시가총액 ({currency})</th>
                     <th className="py-3.5 px-4 text-right">현재가 ({currency})</th>
                     <th className="py-3.5 px-4 text-right">24h 등락</th>
@@ -651,9 +758,13 @@ export default function HomePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/70 text-sm">
-                  {paginatedRows.map((item) => {
+                  {paginatedRows.map((item, idx) => {
                     const isPos = item.change_pct >= 0;
                     const cleanCountry = (item.country_code || 'US').trim().toUpperCase();
+                    const displayRank =
+                      rankBy === 'market_cap_usd'
+                        ? item.rank
+                        : (page - 1) * pageSize + idx + 1;
                     return (
                       <tr
                         key={`${item.asset_type}-${item.ticker}`}
@@ -661,7 +772,7 @@ export default function HomePage() {
                         className="hover:bg-slate-800/60 transition-colors cursor-pointer"
                       >
                         <td className="py-3.5 px-4 text-center font-semibold text-slate-300">
-                          {item.rank}
+                          {displayRank}
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
@@ -702,6 +813,11 @@ export default function HomePage() {
                             </div>
                           </div>
                         </td>
+                        {rankBy !== 'market_cap_usd' && (
+                          <td className="py-3.5 px-4 text-right font-bold text-indigo-300 tabular-nums">
+                            {formatMetricCell(item, rankBy, currency, fxRates)}
+                          </td>
+                        )}
                         <td className="py-3.5 px-4 text-right font-semibold text-white tabular-nums">
                           {formatMarketCap(item.market_cap_usd, currency, fxRates)}
                         </td>
@@ -761,14 +877,14 @@ export default function HomePage() {
         </section>
       </main>
 
-      {/* 종목 상세 히스토리 그래프 모달 */}
+      {/* 종목 상세 히스토리 그래프 및 재무 요약 모달 */}
       {selectedAsset && (
         <div
           className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => setSelectedAsset(null)}
         >
           <div
-            className="w-full max-w-3xl rounded-2xl bg-slate-900 border border-slate-700 p-5 sm:p-6 shadow-2xl space-y-4"
+            className="w-full max-w-3xl rounded-2xl bg-slate-900 border border-slate-700 p-5 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
@@ -780,7 +896,7 @@ export default function HomePage() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  현재 글로벌 순위 #{selectedAsset.rank}위 · 시가총액{' '}
+                  현재 글로벌 시총 순위 #{selectedAsset.rank}위 · 시가총액{' '}
                   {formatMarketCap(selectedAsset.market_cap_usd, currency, fxRates)}
                 </p>
               </div>
@@ -792,7 +908,38 @@ export default function HomePage() {
               </button>
             </div>
 
-            {/* 지표 및 기간 선택 컨트롤 */}
+            {/* 종목 재무 요약 카드 (STOCK인 경우 표시) */}
+            {selectedAsset.asset_type === 'STOCK' && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-xs">
+                <div>
+                  <div className="text-slate-400">매출 (Revenue)</div>
+                  <div className="font-bold text-white mt-0.5">
+                    {formatMetricCell(selectedAsset, 'revenue_usd', currency, fxRates)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-400">순이익 (Earnings)</div>
+                  <div className="font-bold text-white mt-0.5">
+                    {formatMetricCell(selectedAsset, 'earnings_usd', currency, fxRates)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-400">PER / PBR</div>
+                  <div className="font-bold text-white mt-0.5">
+                    {formatMetricCell(selectedAsset, 'pe_ratio', currency, fxRates)} /{' '}
+                    {formatMetricCell(selectedAsset, 'pb_ratio', currency, fxRates)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-400">영업이익률 / 배당률</div>
+                  <div className="font-bold text-white mt-0.5">
+                    {formatMetricCell(selectedAsset, 'operating_margin', currency, fxRates)} /{' '}
+                    {formatMetricCell(selectedAsset, 'dividend_yield', currency, fxRates)}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex rounded-lg bg-slate-950 p-1 border border-slate-800">
                 {[
