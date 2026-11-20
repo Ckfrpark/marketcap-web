@@ -23,6 +23,13 @@ interface DailySnapshot {
   rankings: RankingItem[];
 }
 
+interface HistoryPoint {
+  date: string;
+  price_usd: number;
+  market_cap_usd: number;
+  rank: number;
+}
+
 type CurrencyCode = 'USD' | 'KRW' | 'EUR' | 'JPY' | 'CNY';
 
 const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
@@ -39,6 +46,17 @@ const R2_BASE =
 
 function getTodayUtcDate(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function getPastDates(baseDateStr: string, days: number, step: number): string[] {
+  const base = new Date(`${baseDateStr}T00:00:00Z`);
+  const list: string[] = [];
+  for (let d = days; d >= 0; d -= step) {
+    const dt = new Date(base.getTime() - d * 86400 * 1000);
+    list.push(dt.toISOString().slice(0, 10));
+  }
+  if (list[list.length - 1] !== baseDateStr) list.push(baseDateStr);
+  return list;
 }
 
 function convertFromUsd(
@@ -136,6 +154,141 @@ function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
   );
 }
 
+/** 종목 상세 인터랙티브 라인/영역 차트 */
+function DetailedAreaChart({
+  points,
+  metric,
+  currency,
+  fxRates,
+}: {
+  points: HistoryPoint[];
+  metric: 'market_cap_usd' | 'price_usd' | 'rank';
+  currency: CurrencyCode;
+  fxRates: Record<string, number>;
+}) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
+  if (points.length < 2) {
+    return (
+      <div className="h-64 flex items-center justify-center text-xs text-slate-400">
+        차트를 그릴 과거 스냅샷 데이터가 부족합니다.
+      </div>
+    );
+  }
+
+  const width = 680;
+  const height = 240;
+  const padX = 16;
+  const padY = 20;
+
+  const values = points.map((p) => p[metric]);
+  const minVal = Math.min(...values);
+  const maxVal = Math.max(...values);
+  const range = maxVal - minVal || 1;
+
+  const coords = points.map((p, idx) => {
+    const x = padX + (idx / (points.length - 1)) * (width - padX * 2);
+    // rank는 1위가 위로 가도록 반전
+    const ratio =
+      metric === 'rank'
+        ? (maxVal - p[metric]) / range
+        : (p[metric] - minVal) / range;
+    const y = height - padY - ratio * (height - padY * 2);
+    return { x, y, point: p };
+  });
+
+  const linePoints = coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+  const areaPoints = `${coords[0].x.toFixed(1)},${height - padY} ${linePoints} ${coords[
+    coords.length - 1
+  ].x.toFixed(1)},${height - padY}`;
+
+  const isUp =
+    metric === 'rank'
+      ? points[points.length - 1].rank <= points[0].rank
+      : points[points.length - 1][metric] >= points[0][metric];
+  const stroke = isUp ? '#10b981' : '#f43f5e';
+
+  const active = hoverIdx !== null ? coords[hoverIdx] : coords[coords.length - 1];
+
+  const formatMetric = (p: HistoryPoint) => {
+    if (metric === 'market_cap_usd') return formatMarketCap(p.market_cap_usd, currency, fxRates);
+    if (metric === 'price_usd') return formatPrice(p.price_usd, currency, fxRates);
+    return `#${p.rank}위`;
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-baseline justify-between bg-slate-950/60 border border-slate-800 rounded-lg px-4 py-2.5">
+        <div>
+          <span className="text-xs text-slate-400 mr-2">{active.point.date}</span>
+          <span className="text-lg font-bold text-white">{formatMetric(active.point)}</span>
+        </div>
+        <div className="text-xs text-slate-400">
+          순위 <span className="text-slate-200 font-semibold">#{active.point.rank}</span> · 주가{' '}
+          <span className="text-slate-200 font-semibold">
+            {formatPrice(active.point.price_usd, currency, fxRates)}
+          </span>
+        </div>
+      </div>
+
+      <div className="relative w-full overflow-hidden rounded-xl bg-slate-950/50 border border-slate-800 p-2">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="w-full h-60 select-none cursor-crosshair"
+          onMouseLeave={() => setHoverIdx(null)}
+        >
+          <defs>
+            <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={stroke} stopOpacity="0.28" />
+              <stop offset="100%" stopColor={stroke} stopOpacity="0.0" />
+            </linearGradient>
+          </defs>
+
+          <polygon points={areaPoints} fill="url(#chartGrad)" />
+          <polyline
+            fill="none"
+            stroke={stroke}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            points={linePoints}
+          />
+
+          {active && (
+            <>
+              <line
+                x1={active.x}
+                y1={padY}
+                x2={active.x}
+                y2={height - padY}
+                stroke="#475569"
+                strokeDasharray="3 3"
+                strokeWidth="1"
+              />
+              <circle cx={active.x} cy={active.y} r="4.5" fill={stroke} stroke="#0f172a" strokeWidth="2" />
+            </>
+          )}
+
+          {coords.map((c, idx) => {
+            const sliceW = (width - padX * 2) / coords.length;
+            return (
+              <rect
+                key={c.point.date}
+                x={c.x - sliceW / 2}
+                y={0}
+                width={Math.max(sliceW, 4)}
+                height={height}
+                fill="transparent"
+                onMouseEnter={() => setHoverIdx(idx)}
+              />
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const [selectedDate, setSelectedDate] = useState<string>(getTodayUtcDate());
   const [snapshot, setSnapshot] = useState<DailySnapshot | null>(null);
@@ -145,8 +298,16 @@ export default function HomePage() {
   const [currency, setCurrency] = useState<CurrencyCode>('USD');
   const [assetFilter, setAssetFilter] = useState<'ALL' | 'STOCK' | 'ETF' | 'CRYPTO'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showTopChart, setShowTopChart] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const pageSize = 100;
+
+  // 종목 상세 그래프 모달 상태
+  const [selectedAsset, setSelectedAsset] = useState<RankingItem | null>(null);
+  const [chartRange, setChartRange] = useState<30 | 90 | 365>(90);
+  const [chartMetric, setChartMetric] = useState<'market_cap_usd' | 'price_usd' | 'rank'>('market_cap_usd');
+  const [historyPoints, setHistoryPoints] = useState<HistoryPoint[]>([]);
+  const [historyLoading, setHistoryLoading] = useState<boolean>(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,6 +338,50 @@ export default function HomePage() {
     };
   }, [selectedDate]);
 
+  // 종목 클릭 시 과거 R2 일자별 스냅샷에서 시계열 추출
+  useEffect(() => {
+    if (!selectedAsset) return;
+    let cancelled = false;
+
+    async function loadAssetHistory() {
+      setHistoryLoading(true);
+      const step = chartRange === 30 ? 1 : chartRange === 90 ? 3 : 10;
+      const dates = getPastDates(selectedDate, chartRange, step);
+
+      const results = await Promise.all(
+        dates.map(async (d) => {
+          try {
+            const res = await fetch(`${R2_BASE}/snapshots/rankings/${d}.json`);
+            if (!res.ok) return null;
+            const snap: DailySnapshot = await res.json();
+            const found = snap.rankings.find(
+              (r) => r.ticker === selectedAsset?.ticker && r.asset_type === selectedAsset?.asset_type
+            );
+            if (!found) return null;
+            return {
+              date: d,
+              price_usd: found.price_usd,
+              market_cap_usd: found.market_cap_usd,
+              rank: found.rank,
+            } as HistoryPoint;
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      if (!cancelled) {
+        setHistoryPoints(results.filter((x): x is HistoryPoint => x !== null));
+        setHistoryLoading(false);
+      }
+    }
+
+    loadAssetHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAsset, chartRange, selectedDate]);
+
   const filteredRankings = useMemo(() => {
     if (!snapshot) return [];
     const q = searchQuery.trim().toLowerCase();
@@ -190,6 +395,9 @@ export default function HomePage() {
       );
     });
   }, [snapshot, assetFilter, searchQuery]);
+
+  const top10ForBarChart = useMemo(() => filteredRankings.slice(0, 10), [filteredRankings]);
+  const maxTop10Mcap = top10ForBarChart[0]?.market_cap_usd || 1;
 
   const totalPages = Math.max(1, Math.ceil(filteredRankings.length / pageSize));
   const paginatedRows = useMemo(() => {
@@ -211,7 +419,7 @@ export default function HomePage() {
               </span>
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              글로벌 주식 · ETF · 암호화폐 통합 시가총액 순위 및 365일 히스토리
+              종목을 클릭하면 30일 · 90일 · 365일 시가총액 및 순위 변동 그래프를 볼 수 있습니다
             </p>
           </div>
 
@@ -270,6 +478,79 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* Top 10 시가총액 비교 막대 그래프 */}
+        {!loading && !error && top10ForBarChart.length > 0 && (
+          <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-sm font-bold text-white">
+                  📊 Top 10 시가총액 비교 그래프 ({assetFilter === 'ALL' ? '전체 자산' : assetFilter})
+                </h2>
+                <p className="text-xs text-slate-400">
+                  막대를 클릭하면 해당 종목의 365일 추이 차트가 열립니다
+                </p>
+              </div>
+              <button
+                onClick={() => setShowTopChart((v) => !v)}
+                className="text-xs px-3 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+              >
+                {showTopChart ? '그래프 접기 ▲' : '그래프 펼치기 ▼'}
+              </button>
+            </div>
+
+            {showTopChart && (
+              <div className="space-y-2.5 pt-2">
+                {top10ForBarChart.map((item, idx) => {
+                  const widthPct = Math.max(4, (item.market_cap_usd / maxTop10Mcap) * 100);
+                  const isPos = item.change_pct >= 0;
+                  return (
+                    <button
+                      key={`bar-${item.asset_type}-${item.ticker}`}
+                      onClick={() => setSelectedAsset(item)}
+                      className="w-full text-left group flex items-center gap-3 hover:bg-slate-800/40 p-1.5 rounded-lg transition"
+                    >
+                      <div className="w-6 text-xs font-bold text-slate-400 text-right">
+                        {idx + 1}
+                      </div>
+                      <div className="w-28 sm:w-40 truncate">
+                        <span className="text-xs font-semibold text-white group-hover:text-indigo-400">
+                          {item.name}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400 ml-1.5">
+                          {item.ticker}
+                        </span>
+                      </div>
+                      <div className="flex-1 h-5 bg-slate-950 rounded-md overflow-hidden p-0.5">
+                        <div
+                          style={{ width: `${widthPct}%` }}
+                          className={`h-full rounded transition-all duration-300 ${
+                            item.asset_type === 'CRYPTO'
+                              ? 'bg-gradient-to-r from-amber-500 to-orange-400'
+                              : item.asset_type === 'ETF'
+                              ? 'bg-gradient-to-r from-sky-500 to-cyan-400'
+                              : 'bg-gradient-to-r from-indigo-600 to-violet-500'
+                          }`}
+                        />
+                      </div>
+                      <div className="w-24 sm:w-28 text-right text-xs font-semibold text-white tabular-nums">
+                        {formatMarketCap(item.market_cap_usd, currency, fxRates)}
+                      </div>
+                      <div
+                        className={`w-14 text-right text-xs font-medium tabular-nums hidden sm:block ${
+                          isPos ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {isPos ? `+${item.change_pct.toFixed(1)}%` : `${item.change_pct.toFixed(1)}%`}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* 필터 및 검색 바 */}
         <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex flex-wrap gap-1.5">
             {[
@@ -317,6 +598,7 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* 메인 시가총액 순위 테이블 */}
         <section className="rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shadow-xl">
           {loading ? (
             <div className="py-20 text-center text-sm text-slate-400">
@@ -338,7 +620,7 @@ export default function HomePage() {
                 <thead>
                   <tr className="border-b border-slate-800 bg-slate-900/90 text-[11px] uppercase tracking-wider text-slate-400">
                     <th className="py-3.5 px-4 w-16 text-center">순위</th>
-                    <th className="py-3.5 px-4">자산명 / 티커</th>
+                    <th className="py-3.5 px-4">자산명 / 티커 (클릭 시 상세 차트)</th>
                     <th className="py-3.5 px-4 text-right">시가총액 ({currency})</th>
                     <th className="py-3.5 px-4 text-right">현재가 ({currency})</th>
                     <th className="py-3.5 px-4 text-right">24h 등락</th>
@@ -352,7 +634,8 @@ export default function HomePage() {
                     return (
                       <tr
                         key={`${item.asset_type}-${item.ticker}`}
-                        className="hover:bg-slate-800/40 transition-colors"
+                        onClick={() => setSelectedAsset(item)}
+                        className="hover:bg-slate-800/60 transition-colors cursor-pointer"
                       >
                         <td className="py-3.5 px-4 text-center font-semibold text-slate-300">
                           {item.rank}
@@ -374,7 +657,7 @@ export default function HomePage() {
                               </div>
                             )}
                             <div>
-                              <div className="font-semibold text-white leading-tight">
+                              <div className="font-semibold text-white leading-tight hover:text-indigo-400">
                                 {item.name}
                               </div>
                               <div className="flex items-center gap-1.5 mt-0.5">
@@ -454,6 +737,92 @@ export default function HomePage() {
           )}
         </section>
       </main>
+
+      {/* 종목 상세 히스토리 그래프 모달 */}
+      {selectedAsset && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setSelectedAsset(null)}
+        >
+          <div
+            className="w-full max-w-3xl rounded-2xl bg-slate-900 border border-slate-700 p-5 sm:p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg sm:text-xl font-bold text-white">{selectedAsset.name}</h3>
+                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                    {selectedAsset.ticker}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  현재 글로벌 순위 #{selectedAsset.rank}위 · 시가총액{' '}
+                  {formatMarketCap(selectedAsset.market_cap_usd, currency, fxRates)}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedAsset(null)}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 text-xs text-slate-300 hover:text-white"
+              >
+                닫기 ✕
+              </button>
+            </div>
+
+            {/* 지표 및 기간 선택 컨트롤 */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex rounded-lg bg-slate-950 p-1 border border-slate-800">
+                {[
+                  { id: 'market_cap_usd', label: '시가총액 추이' },
+                  { id: 'price_usd', label: '주가 추이' },
+                  { id: 'rank', label: '글로벌 순위 변동' },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setChartMetric(m.id as typeof chartMetric)}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition ${
+                      chartMetric === m.id
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex rounded-lg bg-slate-950 p-1 border border-slate-800">
+                {([30, 90, 365] as const).map((days) => (
+                  <button
+                    key={days}
+                    onClick={() => setChartRange(days)}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition ${
+                      chartRange === days
+                        ? 'bg-slate-200 text-slate-900'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {days}일
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {historyLoading ? (
+              <div className="h-64 flex items-center justify-center text-xs text-slate-400">
+                과거 {chartRange}일 스냅샷 데이터를 분석해 차트를 그리는 중입니다...
+              </div>
+            ) : (
+              <DetailedAreaChart
+                points={historyPoints}
+                metric={chartMetric}
+                currency={currency}
+                fxRates={fxRates}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
