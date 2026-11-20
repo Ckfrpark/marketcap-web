@@ -195,9 +195,9 @@ function formatMarketCap(
 
   if (currency === 'KRW') {
     const jo = val / 1e12;
-    if (jo >= 1) return `${sign}${sym}${jo.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}조`;
+    if (jo >= 1) return `${sign}${sym}${Math.round(jo).toLocaleString('ko-KR')}조`;
     const eok = val / 1e8;
-    return `${sign}${sym}${eok.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}억`;
+    return `${sign}${sym}${Math.round(eok).toLocaleString('ko-KR')}억`;
   }
 
   if (val >= 999.5e9) return `${sign}${sym}${(val / 1e12).toFixed(3)} T`;
@@ -626,7 +626,6 @@ export default function HomePage() {
                 Global ranking
               </button>
 
-              {/* Ranking by countries 드롭다운 */}
               <div className="relative" ref={menuRef}>
                 <button
                   onClick={() => setCountryMenuOpen((v) => !v)}
@@ -776,7 +775,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Rank by 재무 지표 선택 바 */}
         <section className="rounded-xl bg-slate-900/90 border border-slate-800 p-3.5 sm:p-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold text-slate-400 mr-1">Rank by</span>
@@ -799,7 +797,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Top 10 비교 막대 그래프 */}
         {!loading && !error && top10ForBarChart.length > 0 && (
           <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3">
@@ -870,7 +867,6 @@ export default function HomePage() {
           </section>
         )}
 
-        {/* 필터 · 표시 개수 · 검색 바 */}
         <section className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1.5">
@@ -940,7 +936,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* 메인 순위 테이블 */}
         <section className="rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shadow-xl">
           {loading ? (
             <div className="py-20 text-center text-sm text-slate-400">
@@ -1115,7 +1110,6 @@ export default function HomePage() {
         </section>
       </main>
 
-      {/* All Countries 리더보드 모달 */}
       {showAllCountriesModal && (
         <div
           className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
@@ -1168,7 +1162,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* 종목 상세 히스토리 그래프 및 재무 요약 모달 */}
       {selectedAsset && (
         <div
           className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
