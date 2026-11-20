@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface RankingItem {
   rank: number;
@@ -79,6 +79,72 @@ const RANK_METRICS: {
   { id: 'total_cash_usd', label: 'Cash on hand', colTitle: '현금성자산', kind: 'money' },
   { id: 'pb_ratio', label: 'Price to Book', colTitle: 'PBR (P/B)', kind: 'ratio' },
 ];
+
+const EU_CODES = ['DE', 'FR', 'NL', 'ES', 'IT', 'DK', 'SE', 'PL', 'FI', 'IE', 'BE', 'AT'];
+
+const COUNTRY_GROUPS: {
+  region: string;
+  items: { code: string; name: string; flag: string }[];
+}[] = [
+  {
+    region: 'America',
+    items: [
+      { code: 'US', name: 'United States', flag: '🇺🇸' },
+      { code: 'CA', name: 'Canada', flag: '🇨🇦' },
+      { code: 'MX', name: 'Mexico', flag: '🇲🇽' },
+      { code: 'BR', name: 'Brazil', flag: '🇧🇷' },
+      { code: 'CL', name: 'Chile', flag: '🇨🇱' },
+    ],
+  },
+  {
+    region: 'Europe',
+    items: [
+      { code: 'EU', name: 'European Union', flag: '🇪🇺' },
+      { code: 'DE', name: 'Germany', flag: '🇩🇪' },
+      { code: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
+      { code: 'FR', name: 'France', flag: '🇫🇷' },
+      { code: 'ES', name: 'Spain', flag: '🇪🇸' },
+      { code: 'NL', name: 'Netherlands', flag: '🇳🇱' },
+      { code: 'SE', name: 'Sweden', flag: '🇸🇪' },
+      { code: 'IT', name: 'Italy', flag: '🇮🇹' },
+      { code: 'CH', name: 'Switzerland', flag: '🇨🇭' },
+      { code: 'PL', name: 'Poland', flag: '🇵🇱' },
+      { code: 'FI', name: 'Finland', flag: '🇫🇮' },
+    ],
+  },
+  {
+    region: 'Asia',
+    items: [
+      { code: 'CN', name: 'China', flag: '🇨🇳' },
+      { code: 'JP', name: 'Japan', flag: '🇯🇵' },
+      { code: 'KR', name: 'South Korea', flag: '🇰🇷' },
+      { code: 'HK', name: 'Hong Kong', flag: '🇭🇰' },
+      { code: 'SG', name: 'Singapore', flag: '🇸🇬' },
+      { code: 'ID', name: 'Indonesia', flag: '🇮🇩' },
+      { code: 'IN', name: 'India', flag: '🇮🇳' },
+      { code: 'MY', name: 'Malaysia', flag: '🇲🇾' },
+      { code: 'TW', name: 'Taiwan', flag: '🇹🇼' },
+      { code: 'TH', name: 'Thailand', flag: '🇹🇭' },
+      { code: 'VN', name: 'Vietnam', flag: '🇻🇳' },
+    ],
+  },
+  {
+    region: 'Others',
+    items: [
+      { code: 'AU', name: 'Australia', flag: '🇦🇺' },
+      { code: 'NZ', name: 'New Zealand', flag: '🇳🇿' },
+      { code: 'IL', name: 'Israel', flag: '🇮🇱' },
+      { code: 'SA', name: 'Saudi Arabia', flag: '🇸🇦' },
+      { code: 'TR', name: 'Turkey', flag: '🇹🇷' },
+      { code: 'RU', name: 'Russia', flag: '🇷🇺' },
+      { code: 'ZA', name: 'South Africa', flag: '🇿🇦' },
+    ],
+  },
+];
+
+const ALL_COUNTRY_MAP = Object.fromEntries(
+  COUNTRY_GROUPS.flatMap((g) => g.items.map((c) => [c.code, c]))
+);
 
 const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   USD: '$',
@@ -306,7 +372,6 @@ function DetailedAreaChart({
               <stop offset="100%" stopColor={stroke} stopOpacity="0.0" />
             </linearGradient>
           </defs>
-
           <polygon points={areaPoints} fill="url(#chartGrad)" />
           <polyline
             fill="none"
@@ -316,7 +381,6 @@ function DetailedAreaChart({
             strokeLinejoin="round"
             points={linePoints}
           />
-
           {active && (
             <>
               <line
@@ -331,7 +395,6 @@ function DetailedAreaChart({
               <circle cx={active.x} cy={active.y} r="4.5" fill={stroke} stroke="#0f172a" strokeWidth="2" />
             </>
           )}
-
           {coords.map((c, idx) => {
             const sliceW = (width - padX * 2) / coords.length;
             return (
@@ -360,6 +423,11 @@ export default function HomePage() {
 
   const [currency, setCurrency] = useState<CurrencyCode>('USD');
   const [rankBy, setRankBy] = useState<RankMetricKey>('market_cap_usd');
+  const [selectedCountry, setSelectedCountry] = useState<string>('ALL');
+  const [countryMenuOpen, setCountryMenuOpen] = useState<boolean>(false);
+  const [showAllCountriesModal, setShowAllCountriesModal] = useState<boolean>(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
   const [assetFilter, setAssetFilter] = useState<'ALL' | 'STOCK' | 'ETF' | 'CRYPTO'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showTopChart, setShowTopChart] = useState<boolean>(true);
@@ -373,15 +441,23 @@ export default function HomePage() {
   const [historyLoading, setHistoryLoading] = useState<boolean>(false);
 
   useEffect(() => {
+    function handleOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setCountryMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     async function loadSnapshot() {
       setLoading(true);
       setError(null);
       try {
         const res = await fetch(`${R2_BASE}/snapshots/rankings/${selectedDate}.json`);
-        if (!res.ok) {
-          throw new Error(`해당 날짜(${selectedDate})의 스냅샷 데이터가 없습니다.`);
-        }
+        if (!res.ok) throw new Error(`해당 날짜(${selectedDate})의 스냅샷 데이터가 없습니다.`);
         const data: DailySnapshot = await res.json();
         if (!cancelled) {
           setSnapshot(data);
@@ -454,6 +530,14 @@ export default function HomePage() {
     const q = searchQuery.trim().toLowerCase();
     const list = snapshot.rankings.filter((item) => {
       if (assetFilter !== 'ALL' && item.asset_type !== assetFilter) return false;
+      if (selectedCountry !== 'ALL') {
+        const cc = (item.country_code || '').trim().toUpperCase();
+        if (selectedCountry === 'EU') {
+          if (!EU_CODES.includes(cc)) return false;
+        } else if (cc !== selectedCountry) {
+          return false;
+        }
+      }
       if (rankBy !== 'market_cap_usd') {
         const v = item[rankBy];
         if (v === null || v === undefined || Number.isNaN(v)) return false;
@@ -468,12 +552,31 @@ export default function HomePage() {
 
     if (rankBy === 'market_cap_usd') return list;
 
-    return [...list].sort((a, b) => {
-      const va = Number(a[rankBy] ?? -Infinity);
-      const vb = Number(b[rankBy] ?? -Infinity);
-      return vb - va;
-    });
-  }, [snapshot, assetFilter, searchQuery, rankBy]);
+    return [...list].sort((a, b) => Number(b[rankBy] ?? -Infinity) - Number(a[rankBy] ?? -Infinity));
+  }, [snapshot, assetFilter, selectedCountry, searchQuery, rankBy]);
+
+  const countryLeaderboard = useMemo(() => {
+    if (!snapshot) return [];
+    const map = new Map<string, { code: string; count: number; totalMcap: number; topName: string }>();
+    for (const item of snapshot.rankings) {
+      if (item.asset_type === 'CRYPTO') continue;
+      const cc = (item.country_code || 'US').trim().toUpperCase();
+      const prev = map.get(cc);
+      if (!prev) {
+        map.set(cc, { code: cc, count: 1, totalMcap: item.market_cap_usd, topName: item.name });
+      } else {
+        prev.count += 1;
+        prev.totalMcap += item.market_cap_usd;
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.totalMcap - a.totalMcap);
+  }, [snapshot]);
+
+  const displayedTotalMcap = useMemo(() => {
+    if (!snapshot) return 0;
+    if (selectedCountry === 'ALL' && assetFilter === 'ALL') return snapshot.total_market_cap_usd;
+    return filteredRankings.reduce((acc, cur) => acc + cur.market_cap_usd, 0);
+  }, [snapshot, selectedCountry, assetFilter, filteredRankings]);
 
   const top10ForBarChart = useMemo(() => filteredRankings.slice(0, 10), [filteredRankings]);
   const maxTop10Mcap = top10ForBarChart[0]?.market_cap_usd || 1;
@@ -485,21 +588,113 @@ export default function HomePage() {
   }, [filteredRankings, page, pageSize]);
 
   const fxRates = snapshot?.fx_rates || { USD: 1 };
+  const selectedCountryInfo = selectedCountry !== 'ALL' ? ALL_COUNTRY_MAP[selectedCountry] : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-              <span>🌍 Global MarketCap Tracker</span>
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+      <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-4">
+            <button
+              onClick={() => {
+                setSelectedCountry('ALL');
+                setRankBy('market_cap_usd');
+                setAssetFilter('ALL');
+                setPage(1);
+              }}
+              className="text-lg sm:text-xl font-bold tracking-tight text-white flex items-center gap-2 hover:opacity-90"
+            >
+              <span>🌍 Global MarketCap</span>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                 LIVE
               </span>
-            </h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              종목을 클릭하면 30일 · 90일 · 365일 · 10년 시가총액 및 순위 변동 그래프를 볼 수 있습니다
-            </p>
+            </button>
+
+            <nav className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-semibold">
+              <button
+                onClick={() => {
+                  setSelectedCountry('ALL');
+                  setCountryMenuOpen(false);
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  selectedCountry === 'ALL'
+                    ? 'bg-slate-800 text-white'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                Global ranking
+              </button>
+
+              {/* Ranking by countries 드롭다운 */}
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={() => setCountryMenuOpen((v) => !v)}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
+                    selectedCountry !== 'ALL' || countryMenuOpen
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <span>
+                    {selectedCountryInfo
+                      ? `${selectedCountryInfo.flag} ${selectedCountryInfo.name}`
+                      : selectedCountry !== 'ALL'
+                      ? `${getCountryFlag(selectedCountry, 'STOCK')} ${selectedCountry}`
+                      : 'Ranking by countries'}
+                  </span>
+                  <span className="text-[10px]">▾</span>
+                </button>
+
+                {countryMenuOpen && (
+                  <div className="fixed sm:absolute left-3 right-3 sm:left-0 sm:right-auto mt-2 sm:w-[700px] rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl p-5 z-50">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
+                      {COUNTRY_GROUPS.map((group) => (
+                        <div key={group.region}>
+                          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider pb-2 mb-2 border-b border-slate-800">
+                            {group.region}
+                          </div>
+                          <ul className="space-y-1">
+                            {group.items.map((c) => (
+                              <li key={c.code}>
+                                <button
+                                  onClick={() => {
+                                    setSelectedCountry(c.code);
+                                    setCountryMenuOpen(false);
+                                    setPage(1);
+                                  }}
+                                  className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center gap-2 transition ${
+                                    selectedCountry === c.code
+                                      ? 'bg-indigo-600 text-white font-semibold'
+                                      : 'text-slate-200 hover:bg-slate-800'
+                                  }`}
+                                >
+                                  <span className="text-sm">{c.flag}</span>
+                                  <span className="truncate">{c.name}</span>
+                                </button>
+                              </li>
+                            ))}
+                            {group.region === 'Others' && (
+                              <li className="pt-1.5">
+                                <button
+                                  onClick={() => {
+                                    setCountryMenuOpen(false);
+                                    setShowAllCountriesModal(true);
+                                  }}
+                                  className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold text-indigo-400 hover:bg-slate-800"
+                                >
+                                  &gt;&gt; All Countries
+                                </button>
+                              </li>
+                            )}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </nav>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -534,19 +729,43 @@ export default function HomePage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {selectedCountry !== 'ALL' && (
+          <div className="flex items-center justify-between rounded-xl bg-indigo-950/50 border border-indigo-500/40 px-4 py-2.5 text-xs">
+            <div className="flex items-center gap-2 text-indigo-200 font-semibold">
+              <span>국가 필터 적용 중:</span>
+              <span className="text-white text-sm">
+                {selectedCountryInfo
+                  ? `${selectedCountryInfo.flag} ${selectedCountryInfo.name}`
+                  : `${getCountryFlag(selectedCountry, 'STOCK')} ${selectedCountry}`}
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                setSelectedCountry('ALL');
+                setPage(1);
+              }}
+              className="px-2.5 py-1 rounded-md bg-indigo-600 text-white font-semibold hover:bg-indigo-500"
+            >
+              전체 국가 보기 ✕
+            </button>
+          </div>
+        )}
+
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="rounded-xl bg-slate-900 border border-slate-800 p-4">
-            <div className="text-xs text-slate-400">추적 자산 총 시가총액 ({currency})</div>
+            <div className="text-xs text-slate-400">
+              {selectedCountry === 'ALL' ? '추적 자산 총 시가총액' : `${selectedCountry} 합산 시가총액`} ({currency})
+            </div>
             <div className="text-2xl font-bold text-white mt-1">
-              {snapshot
-                ? formatMarketCap(snapshot.total_market_cap_usd, currency, fxRates)
-                : '계산 중...'}
+              {snapshot ? formatMarketCap(displayedTotalMcap, currency, fxRates) : '계산 중...'}
             </div>
           </div>
           <div className="rounded-xl bg-slate-900 border border-slate-800 p-4">
             <div className="text-xs text-slate-400">집계 자산 수</div>
             <div className="text-2xl font-bold text-white mt-1">
-              {snapshot ? `${snapshot.total_assets.toLocaleString()} 개` : '-'}
+              {snapshot
+                ? `${(selectedCountry === 'ALL' ? snapshot.total_assets : filteredRankings.length).toLocaleString()} 개`
+                : '-'}
             </div>
           </div>
           <div className="rounded-xl bg-slate-900 border border-slate-800 p-4">
@@ -580,13 +799,14 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Top 10 시가총액 비교 막대 그래프 */}
+        {/* Top 10 비교 막대 그래프 */}
         {!loading && !error && top10ForBarChart.length > 0 && (
           <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h2 className="text-sm font-bold text-white">
-                  📊 Top 10 시가총액 비교 그래프 ({assetFilter === 'ALL' ? '전체 자산' : assetFilter})
+                  📊 Top 10 시가총액 비교 그래프 (
+                  {selectedCountryInfo ? selectedCountryInfo.name : selectedCountry === 'ALL' ? '전체 국가' : selectedCountry})
                 </h2>
                 <p className="text-xs text-slate-400">
                   막대를 클릭하면 해당 종목의 30일 · 90일 · 365일 · 10년 추이 차트가 열립니다
@@ -611,9 +831,7 @@ export default function HomePage() {
                       onClick={() => setSelectedAsset(item)}
                       className="w-full text-left group flex items-center gap-3 hover:bg-slate-800/40 p-1.5 rounded-lg transition"
                     >
-                      <div className="w-6 text-xs font-bold text-slate-400 text-right">
-                        {idx + 1}
-                      </div>
+                      <div className="w-6 text-xs font-bold text-slate-400 text-right">{idx + 1}</div>
                       <div className="w-28 sm:w-40 truncate">
                         <span className="text-xs font-semibold text-white group-hover:text-indigo-400">
                           {item.name}
@@ -738,13 +956,27 @@ export default function HomePage() {
                 오늘 날짜로 돌아가기
               </button>
             </div>
+          ) : filteredRankings.length === 0 ? (
+            <div className="py-16 text-center space-y-3 px-4">
+              <p className="text-sm text-slate-400">선택한 국가/필터 조건에 해당하는 종목이 없습니다.</p>
+              <button
+                onClick={() => {
+                  setSelectedCountry('ALL');
+                  setAssetFilter('ALL');
+                  setSearchQuery('');
+                }}
+                className="px-4 py-1.5 rounded-lg bg-indigo-600 text-xs font-semibold text-white hover:bg-indigo-500"
+              >
+                필터 초기화
+              </button>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-800 bg-slate-900/90 text-[11px] uppercase tracking-wider text-slate-400">
                     <th className="py-3.5 px-4 w-16 text-center">순위</th>
-                    <th className="py-3.5 px-4">자산명 / 티커 (클릭 시 상세 차트)</th>
+                    <th className="py-3.5 px-4">자산명 / 티커</th>
                     {rankBy !== 'market_cap_usd' && (
                       <th className="py-3.5 px-4 text-right text-indigo-400">
                         {activeMetricMeta.colTitle}
@@ -762,7 +994,7 @@ export default function HomePage() {
                     const isPos = item.change_pct >= 0;
                     const cleanCountry = (item.country_code || 'US').trim().toUpperCase();
                     const displayRank =
-                      rankBy === 'market_cap_usd'
+                      rankBy === 'market_cap_usd' && selectedCountry === 'ALL'
                         ? item.rank
                         : (page - 1) * pageSize + idx + 1;
                     return (
@@ -795,9 +1027,7 @@ export default function HomePage() {
                                 {item.name}
                               </div>
                               <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="text-xs font-mono text-slate-400">
-                                  {item.ticker}
-                                </span>
+                                <span className="text-xs font-mono text-slate-400">{item.ticker}</span>
                                 <span
                                   className={`text-[10px] px-1.5 py-0.2 rounded font-medium ${
                                     item.asset_type === 'CRYPTO'
@@ -831,7 +1061,16 @@ export default function HomePage() {
                         >
                           {isPos ? `+${item.change_pct.toFixed(2)}%` : `${item.change_pct.toFixed(2)}%`}
                         </td>
-                        <td className="py-3.5 px-4 text-center text-xs text-slate-300 hidden md:table-cell">
+                        <td
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (cleanCountry && cleanCountry !== 'GLOBAL') {
+                              setSelectedCountry(cleanCountry);
+                              setPage(1);
+                            }
+                          }}
+                          className="py-3.5 px-4 text-center text-xs text-slate-300 hidden md:table-cell hover:text-indigo-400"
+                        >
                           <span className="mr-1">{getCountryFlag(cleanCountry, item.asset_type)}</span>
                           {cleanCountry}
                         </td>
@@ -850,8 +1089,7 @@ export default function HomePage() {
             <div className="flex items-center justify-between px-4 py-3 border-t border-slate-800 bg-slate-900/60 text-xs text-slate-400">
               <span>
                 총 {filteredRankings.length.toLocaleString()}개 중{' '}
-                {(page - 1) * pageSize + 1}–
-                {Math.min(page * pageSize, filteredRankings.length)}위 표시
+                {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredRankings.length)}위 표시
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -876,6 +1114,59 @@ export default function HomePage() {
           )}
         </section>
       </main>
+
+      {/* All Countries 리더보드 모달 */}
+      {showAllCountriesModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowAllCountriesModal(false)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl bg-slate-900 border border-slate-700 p-5 sm:p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white">🌐 국가별 상장기업 합산 시가총액 순위</h3>
+              <button
+                onClick={() => setShowAllCountriesModal(false)}
+                className="px-3 py-1 rounded-lg bg-slate-800 text-xs text-slate-300 hover:text-white"
+              >
+                닫기 ✕
+              </button>
+            </div>
+            <div className="divide-y divide-slate-800 text-xs">
+              {countryLeaderboard.map((c, idx) => {
+                const info = ALL_COUNTRY_MAP[c.code];
+                return (
+                  <button
+                    key={c.code}
+                    onClick={() => {
+                      setSelectedCountry(c.code);
+                      setShowAllCountriesModal(false);
+                      setPage(1);
+                    }}
+                    className="w-full py-2.5 px-2 flex items-center justify-between hover:bg-slate-800/60 rounded-lg text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 text-slate-400 font-bold">{idx + 1}</span>
+                      <span className="text-base">{getCountryFlag(c.code, 'STOCK')}</span>
+                      <div>
+                        <div className="font-semibold text-white">{info ? info.name : c.code}</div>
+                        <div className="text-slate-400">
+                          {c.count}개 종목 · 대표: {c.topName}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="font-bold text-indigo-300 tabular-nums">
+                      {formatMarketCap(c.totalMcap, currency, fxRates)}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 종목 상세 히스토리 그래프 및 재무 요약 모달 */}
       {selectedAsset && (
@@ -908,7 +1199,6 @@ export default function HomePage() {
               </button>
             </div>
 
-            {/* 종목 재무 요약 카드 (STOCK인 경우 표시) */}
             {selectedAsset.asset_type === 'STOCK' && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-xs">
                 <div>
