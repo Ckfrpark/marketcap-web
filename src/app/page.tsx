@@ -65,7 +65,6 @@ function formatCountryBadge(rawCode?: string) {
 
 function getConversionMultiplier(currency: CurrencyCode, fxRates?: Record<string, number>): number {
   if (currency === "USD" || !fxRates) return 1;
-  // fx_rates는 1 로컬통화 = ? USD 형태로 저장됨 -> 1 USD = 1 / rate 로컬통화
   const rateToUsd = fxRates[currency];
   if (rateToUsd && rateToUsd > 0) {
     return 1 / rateToUsd;
@@ -142,7 +141,12 @@ function Sparkline({ data, positive }: { data?: number[]; positive: boolean }) {
 }
 
 export default function HomePage() {
-  const R2_BASE = (process.env.NEXT_PUBLIC_R2_PUBLIC_URL || "https://assets.olgong.xyz").replace(/\/$/, "");
+  const R2_BASE = (
+    process.env.NEXT_PUBLIC_R2_BASE_URL ||
+    process.env.NEXT_PUBLIC_R2_PUBLIC_URL ||
+    process.env.NEXT_PUBLIC_R2_URL ||
+    "https://pub-63880054822e4f3e8c0969594b767054.r2.dev"
+  ).replace(/\/$/, "");
 
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>("");
@@ -155,7 +159,6 @@ export default function HomePage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // 상세 모달 차트 상태
   const [selectedAsset, setSelectedAsset] = useState<RankingItem | null>(null);
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>("365D");
   const [historySeries, setHistorySeries] = useState<{ date: string; marketCap: number; rank: number }[]>([]);
@@ -195,7 +198,6 @@ export default function HomePage() {
     };
   }, [R2_BASE, selectedDate]);
 
-  // 종목 상세 클릭 시 과거 스냅샷 샘플링하여 시계열 차트 구성
   useEffect(() => {
     if (!selectedAsset || !snapshot?.date) return;
     let cancelled = false;
@@ -284,7 +286,6 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-100 font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* 상단 헤더 */}
         <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5">
@@ -301,7 +302,6 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* 통화 및 기준일 선택 */}
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="inline-flex rounded-xl bg-[#0f1626] p-1 border border-slate-800">
               {(Object.keys(CURRENCY_META) as CurrencyCode[]).map((c) => (
@@ -333,7 +333,6 @@ export default function HomePage() {
           </div>
         </header>
 
-        {/* 상단 요약 카드 3종 */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-[#0d1424] border border-slate-800/80 rounded-2xl p-5">
             <p className="text-xs text-slate-400">추적 자산 총 시가총액 ({currency})</p>
@@ -357,7 +356,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Top 10 시가총액 비교 그래프 (기본 펼침) */}
         <section className="bg-[#0d1424] border border-slate-800/80 rounded-2xl p-5">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -420,7 +418,6 @@ export default function HomePage() {
           )}
         </section>
 
-        {/* 필터 · 검색 · 페이지당 표시 개수 바 */}
         <section className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             {(
@@ -447,7 +444,6 @@ export default function HomePage() {
               </button>
             ))}
 
-            {/* 페이지당 표시 개수 선택기 */}
             <div className="inline-flex items-center gap-1 bg-[#0f1626] border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs ml-1">
               <span className="text-slate-400 mr-1">표시:</span>
               {[100, 250, 500].map((size) => (
@@ -483,7 +479,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* 메인 순위 테이블 */}
         <section className="bg-[#0d1424] border border-slate-800/80 rounded-2xl overflow-hidden">
           {loading ? (
             <div className="p-12 text-center text-sm text-slate-400">데이터를 불러오는 중입니다...</div>
@@ -522,182 +517,4 @@ export default function HomePage() {
                               <span className="text-[11px] font-medium text-slate-400">
                                 {item.ticker}
                               </span>
-                              <span className="px-1.5 py-0.2 text-[10px] font-semibold rounded bg-slate-800 text-slate-300 border border-slate-700/70">
-                                {item.asset_type}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-4 text-right font-bold text-white whitespace-nowrap">
-                            {formatMarketCap(item.market_cap_usd, currency, multiplier)}
-                          </td>
-                          <td className="py-3.5 px-4 text-right text-slate-200 whitespace-nowrap">
-                            {formatPrice(item.price_usd, currency, multiplier)}
-                          </td>
-                          <td
-                            className={`py-3.5 px-4 text-right font-semibold whitespace-nowrap ${
-                              isPos ? "text-emerald-400" : "text-rose-400"
-                            }`}
-                          >
-                            {isPos
-                              ? `+${item.change_pct.toFixed(2)}%`
-                              : `${item.change_pct.toFixed(2)}%`}
-                          </td>
-                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800/80 text-xs font-medium text-slate-200">
-                              {formatCountryBadge(item.country_code)}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-right">
-                            <Sparkline data={item.sparkline_30d} positive={isPos} />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* 하단 페이지네이션 바 */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3.5 bg-[#0a101d] border-t border-slate-800/80 text-xs text-slate-400">
-                <div>
-                  총 <span className="text-white font-semibold">{filteredRankings.length.toLocaleString()}</span>개 중{" "}
-                  <span className="text-white font-semibold">
-                    {filteredRankings.length === 0 ? 0 : (safePage - 1) * pageSize + 1}
-                  </span>
-                  –
-                  <span className="text-white font-semibold">
-                    {Math.min(safePage * pageSize, filteredRankings.length)}
-                  </span>
-                  위 표시
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    disabled={safePage <= 1}
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 disabled:opacity-40 hover:bg-slate-700 transition"
-                  >
-                    ← 이전
-                  </button>
-                  <span className="text-slate-300 font-medium">
-                    {safePage} / {totalPages} 페이지
-                  </span>
-                  <button
-                    disabled={safePage >= totalPages}
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 disabled:opacity-40 hover:bg-slate-700 transition"
-                  >
-                    다음 →
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </section>
-      </div>
-
-      {/* 종목 상세 시계열 모달 */}
-      {selectedAsset && (
-        <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setSelectedAsset(null)}
-        >
-          <div
-            className="bg-[#0f172a] border border-slate-700 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 text-xs font-bold rounded bg-indigo-600 text-white">
-                    #{selectedAsset.rank}
-                  </span>
-                  <h3 className="text-lg sm:text-xl font-bold text-white">{selectedAsset.name}</h3>
-                  <span className="text-xs text-slate-400">({selectedAsset.ticker})</span>
-                </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  현재 시가총액:{" "}
-                  <span className="text-white font-semibold">
-                    {formatMarketCap(selectedAsset.market_cap_usd, currency, multiplier)}
-                  </span>{" "}
-                  · 현재가:{" "}
-                  <span className="text-white font-semibold">
-                    {formatPrice(selectedAsset.price_usd, currency, multiplier)}
-                  </span>
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedAsset(null)}
-                className="text-slate-400 hover:text-white text-sm px-2.5 py-1 rounded-lg bg-slate-800"
-              >
-                닫기 ✕
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {(["30D", "90D", "365D", "10Y"] as ChartPeriod[]).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setChartPeriod(p)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                    chartPeriod === p
-                      ? "bg-indigo-600 text-white"
-                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                  }`}
-                >
-                  {p === "30D" ? "30일" : p === "90D" ? "90일" : p === "365D" ? "365일" : "10년"}
-                </button>
-              ))}
-            </div>
-
-            <div className="bg-[#090f1d] border border-slate-800 rounded-xl p-4 h-60 flex items-center justify-center">
-              {historyLoading ? (
-                <span className="text-xs text-slate-400">과거 시가총액 데이터 불러오는 중...</span>
-              ) : historySeries.length < 2 ? (
-                <span className="text-xs text-slate-400">해당 기간의 비교 데이터가 부족합니다.</span>
-              ) : (
-                (() => {
-                  const vals = historySeries.map((h) => h.marketCap);
-                  const minV = Math.min(...vals);
-                  const maxV = Math.max(...vals);
-                  const rangeV = maxV - minV || 1;
-                  const W = 560;
-                  const H = 180;
-                  const pts = historySeries
-                    .map((h, i) => {
-                      const x = (i / (historySeries.length - 1)) * W;
-                      const y = H - ((h.marketCap - minV) / rangeV) * (H - 20) - 10;
-                      return `${x.toFixed(1)},${y.toFixed(1)}`;
-                    })
-                    .join(" ");
-
-                  return (
-                    <div className="w-full space-y-2">
-                      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-44 overflow-visible">
-                        <polyline
-                          fill="none"
-                          stroke="#6366f1"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          points={pts}
-                        />
-                      </svg>
-                      <div className="flex justify-between text-[11px] text-slate-400">
-                        <span>{historySeries[0].date}</span>
-                        <span>
-                          최고: {formatMarketCap(maxV, currency, multiplier)} / 최저:{" "}
-                          {formatMarketCap(minV, currency, multiplier)}
-                        </span>
-                        <span>{historySeries[historySeries.length - 1].date}</span>
-                      </div>
-                    </div>
-                  );
-                })()
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+                              <span className="px-1.5 py
