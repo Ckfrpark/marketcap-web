@@ -120,11 +120,28 @@ function formatCompactCurrency(
       ? "CN¥"
       : "$";
 
-  const absVal = Math.abs(converted);
-  if (absVal >= 1e12) return `${prefix}${(converted / 1e12).toFixed(2)} T`;
-  if (absVal >= 1e9) return `${prefix}${(converted / 1e9).toFixed(1)} B`;
-  if (absVal >= 1e6) return `${prefix}${(converted / 1e6).toFixed(1)} M`;
-  return `${prefix}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (code === "KRW") {
+    const jo = converted / 1e12;
+    if (Math.abs(jo) >= 1) {
+      return `${prefix}${jo.toLocaleString("ko-KR", {
+        minimumFractionDigits: Math.abs(jo) < 10 ? 1 : 0,
+        maximumFractionDigits: Math.abs(jo) < 10 ? 1 : 0,
+      })}조`;
+    }
+    const eok = converted / 1e8;
+    return `${prefix}${Math.round(eok).toLocaleString("ko-KR")}억`;
+  }
+
+  const bil = converted / 1e9;
+  if (Math.abs(bil) >= 10) {
+    return `${prefix}${Math.round(bil).toLocaleString("en-US")} bil`;
+  }
+
+  const roundedOneDecimal = Number(bil.toFixed(1));
+  return `${prefix}${roundedOneDecimal.toLocaleString("en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })} bil`;
 }
 
 export default function HomePage() {
