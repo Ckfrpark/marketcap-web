@@ -67,7 +67,6 @@ function normalizeFxRate(
   if (!Number.isFinite(raw) || raw <= 0) {
     return DEFAULT_FX_RATES[currency];
   }
-  // 스냅샷에 "1 현지통화 = X USD" (예: KRW = 0.00074) 형태로 들어오면 역산하여 "1 USD = Y 현지통화"로 변환
   if (raw < 1) {
     return 1 / raw;
   }
@@ -112,10 +111,7 @@ function formatMarketCap(
   if (currency === 'KRW') {
     const jo = converted / 1_000_000_000_000; // 1조 원 = 10^12
     if (Math.abs(jo) >= 1) {
-      return `₩${jo.toLocaleString('ko-KR', {
-        minimumFractionDigits: 1,
-        maximumFractionDigits: 1,
-      })}조`;
+      return `₩${Math.round(jo).toLocaleString('ko-KR')}조`;
     }
     const eok = converted / 100_000_000; // 1억 원 = 10^8
     return `₩${Math.round(eok).toLocaleString('ko-KR')}억`;
@@ -124,7 +120,7 @@ function formatMarketCap(
   if (currency === 'JPY') {
     const cho = converted / 1_000_000_000_000;
     if (Math.abs(cho) >= 1) {
-      return `¥${cho.toLocaleString('en-US', { maximumFractionDigits: 1 })}조`;
+      return `¥${Math.round(cho).toLocaleString('en-US')}조`;
     }
     const oku = converted / 100_000_000;
     return `¥${Math.round(oku).toLocaleString('en-US')}억`;
