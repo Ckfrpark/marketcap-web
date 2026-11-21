@@ -13,6 +13,9 @@ export type RankingAssetItem = {
   price_usd?: number | null;
   change_pct?: number | null;
   sparkline_30d?: number[];
+  category?: string | null;
+  sector?: string | null;
+  industry?: string | null;
 };
 
 type SnapshotPayload = {
@@ -21,6 +24,15 @@ type SnapshotPayload = {
   total_market_cap_usd?: number;
   fx_rates?: Record<string, number>;
   rankings?: RankingAssetItem[];
+};
+
+type CategoryDef = {
+  key: string;
+  label: string;
+  icon: string;
+  keywords: string[];
+  tickers?: string[];
+  assetTypes?: string[];
 };
 
 const DEFAULT_R2_BASE_URL = "https://pub-abab619513474306a997568b43202499.r2.dev";
@@ -85,6 +97,70 @@ const COUNTRY_REGIONS: {
   },
 ];
 
+const CATEGORY_DEFINITIONS: CategoryDef[] = [
+  { key: "AUTOMAKERS", label: "Automakers", icon: "🚗", keywords: ["auto", "motor", "vehicle", "car", "tesla", "toyota", "hyundai", "kia", "ferrari", "byd", "rivian", "lucid", "ford", "general motors"] },
+  { key: "AIRLINES", label: "Airlines", icon: "✈️", keywords: ["airline", "airways", "air lines", "delta", "united airlines", "american airlines", "lufthansa", "ryanair"] },
+  { key: "AIRPORTS", label: "Airports", icon: "🛫", keywords: ["airport", "aena"] },
+  { key: "AIRCRAFT", label: "Aircraft manufacturers", icon: "🛩️", keywords: ["boeing", "airbus", "lockheed", "aerospace", "defense", "northrop", "general dynamics", "embraer"] },
+  { key: "BANKS", label: "Banks", icon: "🏛️", keywords: ["bank", "bancorp", "jpmorgan", "bank of america", "wells fargo", "citigroup", "hsbc", "barclays", "ubs", "bnp", "kbfg", "shinhan"] },
+  { key: "HOTELS", label: "Hotels", icon: "🏨", keywords: ["hotel", "marriott", "hilton", "resort", "hyatt", "intercontinental", "accor"] },
+  { key: "PHARMACEUTICALS", label: "Pharmaceuticals", icon: "💊", keywords: ["pharma", "biopharma", "biotech", "eli lilly", "novo nordisk", "pfizer", "merck", "johnson & johnson", "novartis", "roche", "astrazeneca", "sanofi", "abbvie"] },
+  { key: "ECOMMERCE", label: "E-Commerce", icon: "🛒", keywords: ["e-commerce", "ecommerce", "amazon", "alibaba", "pdd", "mercado", "shopify", "jd.com", "coupang", "sea limited"] },
+  { key: "HEALTHCARE", label: "Healthcare", icon: "🩺", keywords: ["health", "medical", "hospital", "unitedhealth", "intuitive surgical", "thermofisher", "danaher", "abbott", "samsung biologics", "celltrion"] },
+  { key: "COURIER", label: "Courier services", icon: "📦", keywords: ["courier", "logistics", "ups", "fedex", "dhl", "delivery"] },
+  { key: "MEDIA", label: "Media/Press", icon: "📰", keywords: ["media", "news", "press", "broadcast", "disney", "netflix", "comcast", "warner", "fox"] },
+  { key: "ALCOHOL", label: "Alcoholic beverages", icon: "🍷", keywords: ["beer", "brewery", "breweries", "wine", "spirits", "distiller", "diageo", "anheuser", "heineken", "pernod"] },
+  { key: "BEVERAGES", label: "Beverages", icon: "🥤", keywords: ["beverage", "coca-cola", "pepsi", "pepsico", "monster beverage", "keurig"] },
+  { key: "CLOTHING", label: "Clothing", icon: "👕", keywords: ["apparel", "clothing", "nike", "adidas", "lululemon", "puma", "inditex", "zara", "uniqlo", "fast retailing", "hermes", "lvmh", "ralph lauren"] },
+  { key: "MINING", label: "Mining", icon: "⛏️", keywords: ["mining", "gold", "silver", "copper", "lithium", "bhp", "rio tinto", "newmont", "freeport", "glencore", "posco"] },
+  { key: "RAILWAYS", label: "Railways", icon: "🚂", keywords: ["rail", "railway", "railroad", "union pacific", "csx", "norfolk southern", "canadian national", "canadian pacific"] },
+  { key: "INSURANCE", label: "Insurance", icon: "🏦", keywords: ["insurance", "insurer", "allianz", "axa", "chubb", "aig", "metlife", "prudential", "aia"] },
+  { key: "REAL_ESTATE", label: "Real estate", icon: "🏠", keywords: ["real estate", "reit", "prologis", "american tower", "equinix", "welltower", "simon property"] },
+  { key: "PORTS", label: "Ports", icon: "⚓", keywords: ["port", "terminal", "maritime", "shipping", "maersk"] },
+  { key: "PROFESSIONAL_SERVICES", label: "Professional services", icon: "💼", keywords: ["consulting", "advisory", "accenture", "deloitte", "pwc", "kpmg", "ernst", "staffing", "recruiting"] },
+  { key: "FOOD", label: "Food", icon: "🍽️", keywords: ["food", "nestle", "mondelez", "kraft heinz", "general mills", "kellogg", "tyson", "danone"] },
+  { key: "RESTAURANTS", label: "Restaurant chains", icon: "🍔", keywords: ["restaurant", "mcdonald", "starbucks", "chipotle", "yum! brands", "burger", "coffee"] },
+  { key: "SOFTWARE", label: "Software", icon: "💻", keywords: ["software", "cloud", "saas", "microsoft", "oracle", "salesforce", "sap", "adobe", "servicenow", "palantir", "snowflake", "datadog", "crowdstrike"] },
+  { key: "SEMICONDUCTORS", label: "Semiconductors", icon: "🎛️", keywords: ["semiconductor", "chip", "nvidia", "tsmc", "taiwan semiconductor", "broadcom", "asml", "amd", "qualcomm", "micron", "applied materials", "lam research", "kla", "sk hynix", "samsung electronics", "arm"] },
+  { key: "TOBACCO", label: "Tobacco", icon: "🚬", keywords: ["tobacco", "philip morris", "altria", "british american tobacco"] },
+  { key: "FINANCIAL_SERVICES", label: "Financial services", icon: "💳", keywords: ["financial", "visa", "mastercard", "paypal", "american express", "goldman sachs", "morgan stanley", "blackrock", "charles schwab", "berkshire"] },
+  { key: "OIL_GAS", label: "Oil&Gas", icon: "🛢️", keywords: ["oil", "gas", "energy", "petroleum", "exxon", "chevron", "shell", "aramco", "totalenergies", "conocophillips"] },
+  { key: "ELECTRICITY", label: "Electricity", icon: "🔋", keywords: ["electric", "utility", "utilities", "power", "grid", "nextera", "duke energy", "southern company", "kepco"] },
+  { key: "CHEMICALS", label: "Chemicals", icon: "🧪", keywords: ["chemical", "chemicals", "linde", "air products", "sherwin-williams", "dow", "basf", "lg chem"] },
+  { key: "INVESTMENT", label: "Investment", icon: "💰", keywords: ["investment", "capital", "asset management", "private equity", "blackstone", "kkr", "apollo", "brookfield"] },
+  { key: "TELECOMMUNICATION", label: "Telecommunication", icon: "📡", keywords: ["telecom", "telecommunication", "communications", "wireless", "at&t", "verizon", "t-mobile", "softbank", "ntt", "deutsche telekom"] },
+  { key: "RETAIL", label: "Retail", icon: "🛍️", keywords: ["retail", "walmart", "costco", "home depot", "target", "lowe's", "tjx", "dollar general"] },
+  { key: "INTERNET", label: "Internet", icon: "🌐", keywords: ["internet", "alphabet", "google", "meta", "facebook", "instagram", "tiktok", "bytedance", "tencent", "naver", "kakao", "uber", "airbnb", "booking"] },
+  { key: "CONSTRUCTION", label: "Construction", icon: "🏗️", keywords: ["construction", "engineering", "caterpillar", "deere", "komatsu", "vinci"] },
+  { key: "VIDEO_GAME", label: "Video Game", icon: "🎮", keywords: ["gaming", "game", "games", "video game", "nintendo", "sony", "electronic arts", "take-two", "roblox", "activision"] },
+  { key: "TECH", label: "Tech", icon: "🖥️", keywords: ["tech", "technology", "apple", "samsung", "cisco", "ibm", "dell", "hp", "intel", "foxconn", "hon hai"] },
+  { key: "AI", label: "AI", icon: "🤖", keywords: ["artificial intelligence", " ai ", "nvidia", "openai", "palantir", "super micro", "broadcom", "amd", "microsoft", "alphabet", "meta"] },
+  { key: "CRYPTO_ASSETS", label: "Crypto", icon: "🪙", keywords: ["bitcoin", "ethereum", "solana", "ripple", "xrp", "crypto", "coinbase", "microstrategy", "strategy"], assetTypes: ["CRYPTO"] },
+  { key: "ETF_FUNDS", label: "ETFs", icon: "📊", keywords: ["etf", "spdr", "ishares", "vanguard", "invesco", "index fund", "trust"], assetTypes: ["ETF"] },
+];
+
+const CATEGORY_REGIONS: {
+  title: string;
+  keys: string[];
+}[] = [
+  {
+    title: "INDUSTRY & MOBILITY",
+    keys: ["AUTOMAKERS", "AIRLINES", "AIRPORTS", "AIRCRAFT", "BANKS", "HOTELS", "PHARMACEUTICALS", "ECOMMERCE", "HEALTHCARE"],
+  },
+  {
+    title: "CONSUMER & TRANSPORT",
+    keys: ["COURIER", "MEDIA", "ALCOHOL", "BEVERAGES", "CLOTHING", "MINING", "RAILWAYS", "INSURANCE", "REAL_ESTATE"],
+  },
+  {
+    title: "INFRA & FINANCE",
+    keys: ["PORTS", "PROFESSIONAL_SERVICES", "FOOD", "RESTAURANTS", "SOFTWARE", "SEMICONDUCTORS", "TOBACCO", "FINANCIAL_SERVICES", "OIL_GAS", "ELECTRICITY"],
+  },
+  {
+    title: "THEMES & TECH",
+    keys: ["CHEMICALS", "INVESTMENT", "TELECOMMUNICATION", "RETAIL", "INTERNET", "CONSTRUCTION", "VIDEO_GAME", "TECH", "AI", "CRYPTO_ASSETS", "ETF_FUNDS"],
+  },
+];
+
 const EU_MEMBER_CODES = ["DE", "FR", "ES", "NL", "SE", "IT", "PL", "FI"];
 const CURRENCIES = ["USD", "KRW", "EUR", "JPY", "CNY"] as const;
 
@@ -144,14 +220,40 @@ function formatCompactCurrency(
   })} bil`;
 }
 
+function matchesCategory(item: RankingAssetItem, categoryKey: string): boolean {
+  if (!categoryKey) return true;
+  const def = CATEGORY_DEFINITIONS.find((c) => c.key === categoryKey);
+  if (!def) return true;
+
+  const atype = String(item.asset_type || "STOCK").toUpperCase();
+  if (def.assetTypes && def.assetTypes.includes(atype)) {
+    return true;
+  }
+
+  const explicit = String(item.category || item.sector || item.industry || "").toUpperCase();
+  if (explicit && explicit.includes(categoryKey.replace(/_/g, " "))) {
+    return true;
+  }
+
+  const tickerUpper = String(item.ticker || "").trim().toUpperCase();
+  if (def.tickers && def.tickers.includes(tickerUpper)) {
+    return true;
+  }
+
+  const haystack = ` ${String(item.name || "").toLowerCase()} ${String(item.ticker || "").toLowerCase()} ${String(item.sector || "").toLowerCase()} ${String(item.industry || "").toLowerCase()} `;
+  return def.keywords.some((kw) => haystack.includes(kw.toLowerCase()));
+}
+
 export default function HomePage() {
   const [snapshot, setSnapshot] = useState<SnapshotPayload | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedCountry, setSelectedCountry] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [assetFilter, setAssetFilter] = useState<"ALL" | "STOCK" | "ETF" | "CRYPTO">("ALL");
   const [currency, setCurrency] = useState<string>("USD");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
+  const [countryDropdownOpen, setCountryDropdownOpen] = useState<boolean>(false);
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState<boolean>(false);
 
   useEffect(() => {
     const r2Base = resolveR2BaseUrl();
@@ -229,6 +331,14 @@ export default function HomePage() {
     }
   }, [rankings, selectedCountry, availableCountryCounts]);
 
+  const categoryMap = useMemo(() => {
+    const map = new Map<string, CategoryDef>();
+    for (const def of CATEGORY_DEFINITIONS) {
+      map.set(def.key, def);
+    }
+    return map;
+  }, []);
+
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const targetCountry = selectedCountry.toUpperCase();
@@ -246,6 +356,10 @@ export default function HomePage() {
         }
       }
 
+      if (selectedCategory && !matchesCategory(item, selectedCategory)) {
+        return false;
+      }
+
       if (q) {
         const sym = String(item.ticker || "").toLowerCase();
         const nm = String(item.name || "").toLowerCase();
@@ -254,7 +368,7 @@ export default function HomePage() {
 
       return true;
     });
-  }, [rankings, assetFilter, selectedCountry, searchQuery]);
+  }, [rankings, assetFilter, selectedCountry, selectedCategory, searchQuery]);
 
   const totalMarketCapUsd = useMemo(
     () => filteredItems.reduce((acc, cur) => acc + Number(cur.market_cap_usd || 0), 0),
@@ -270,11 +384,16 @@ export default function HomePage() {
     return selectedCountry;
   }, [selectedCountry]);
 
+  const activeCategoryDef = useMemo(() => {
+    if (!selectedCategory) return null;
+    return categoryMap.get(selectedCategory) || null;
+  }, [selectedCategory, categoryMap]);
+
   return (
     <div className="min-h-screen bg-[#060913] text-slate-100">
       <header className="border-b border-slate-800/80 bg-[#080d1a]">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <span className="text-lg font-bold tracking-tight text-white">Global MarketCap</span>
             <span className="px-2 py-0.5 text-xs font-semibold rounded bg-emerald-500/20 text-emerald-300">
               LIVE
@@ -283,13 +402,16 @@ export default function HomePage() {
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setDropdownOpen((prev) => !prev)}
+                onClick={() => {
+                  setCountryDropdownOpen((prev) => !prev);
+                  setCategoryDropdownOpen(false);
+                }}
                 className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white transition"
               >
                 {activeCountryName ? `🌍 ${activeCountryName} ▾` : "Ranking by countries ▾"}
               </button>
 
-              {dropdownOpen && (
+              {countryDropdownOpen && (
                 <div className="absolute left-0 mt-2 w-[min(92vw,880px)] z-40 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 p-6 rounded-xl bg-[#0b1020] border border-slate-800 shadow-2xl">
                   {visibleCountryRegions.map((region, idx) => (
                     <div key={region.title} className="space-y-2.5">
@@ -305,7 +427,7 @@ export default function HomePage() {
                               type="button"
                               onClick={() => {
                                 setSelectedCountry(item.code);
-                                setDropdownOpen(false);
+                                setCountryDropdownOpen(false);
                               }}
                               className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left text-sm transition ${
                                 isSelected
@@ -324,11 +446,75 @@ export default function HomePage() {
                           type="button"
                           onClick={() => {
                             setSelectedCountry("");
-                            setDropdownOpen(false);
+                            setCountryDropdownOpen(false);
                           }}
                           className="pt-2 text-xs font-semibold text-indigo-400 hover:text-indigo-300"
                         >
                           &gt;&gt; All Countries
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setCategoryDropdownOpen((prev) => !prev);
+                  setCountryDropdownOpen(false);
+                }}
+                className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm font-medium text-white transition"
+              >
+                {activeCategoryDef
+                  ? `${activeCategoryDef.icon} ${activeCategoryDef.label} ▾`
+                  : "Ranking by categories ▾"}
+              </button>
+
+              {categoryDropdownOpen && (
+                <div className="absolute left-0 mt-2 w-[min(94vw,960px)] z-40 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 p-6 rounded-xl bg-[#0b1020] border border-slate-800 shadow-2xl">
+                  {CATEGORY_REGIONS.map((region, idx) => (
+                    <div key={region.title} className="space-y-2.5">
+                      <div className="text-xs font-semibold tracking-wider text-slate-400 uppercase pb-1.5 border-b border-slate-800">
+                        {region.title}
+                      </div>
+                      <div className="flex flex-col space-y-0.5">
+                        {region.keys.map((key) => {
+                          const cat = categoryMap.get(key);
+                          if (!cat) return null;
+                          const isSelected = selectedCategory === cat.key;
+                          return (
+                            <button
+                              key={cat.key}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCategory(cat.key);
+                                setCategoryDropdownOpen(false);
+                              }}
+                              className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left text-sm transition ${
+                                isSelected
+                                  ? "bg-indigo-600/30 text-indigo-200 font-semibold"
+                                  : "text-slate-200 hover:bg-slate-800/70"
+                              }`}
+                            >
+                              <span className="w-5 text-center">{cat.icon}</span>
+                              <span className="truncate">{cat.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {idx === CATEGORY_REGIONS.length - 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCategory("");
+                            setCategoryDropdownOpen(false);
+                          }}
+                          className="pt-2 text-xs font-semibold text-indigo-400 hover:text-indigo-300"
+                        >
+                          &gt;&gt; All Categories
                         </button>
                       )}
                     </div>
@@ -361,17 +547,29 @@ export default function HomePage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {selectedCountry && (
-          <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-indigo-950/40 border border-indigo-800/50">
-            <span className="text-sm text-indigo-200">
-              국가 필터 적용 중: <strong>{activeCountryName}</strong>
-            </span>
+        {(selectedCountry || selectedCategory) && (
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 rounded-xl bg-indigo-950/40 border border-indigo-800/50">
+            <div className="flex flex-wrap items-center gap-3 text-sm text-indigo-200">
+              {selectedCountry && (
+                <span>
+                  국가 필터: <strong>{activeCountryName}</strong>
+                </span>
+              )}
+              {activeCategoryDef && (
+                <span>
+                  카테고리 필터: <strong>{activeCategoryDef.icon} {activeCategoryDef.label}</strong>
+                </span>
+              )}
+            </div>
             <button
               type="button"
-              onClick={() => setSelectedCountry("")}
+              onClick={() => {
+                setSelectedCountry("");
+                setSelectedCategory("");
+              }}
               className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white"
             >
-              전체 국가 보기 ✕
+              필터 해제 ✕
             </button>
           </div>
         )}
@@ -452,11 +650,12 @@ export default function HomePage() {
               ) : filteredItems.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-10 text-center text-slate-400 space-y-3">
-                    <div>선택한 국가/필터 조건에 해당하는 종목이 없습니다.</div>
+                    <div>선택한 국가/카테고리/필터 조건에 해당하는 종목이 없습니다.</div>
                     <button
                       type="button"
                       onClick={() => {
                         setSelectedCountry("");
+                        setSelectedCategory("");
                         setAssetFilter("ALL");
                         setSearchQuery("");
                       }}
