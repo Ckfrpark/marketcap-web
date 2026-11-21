@@ -79,6 +79,29 @@ const DEFAULT_FX_RATES: Record<CurrencyCode, number> = {
   CNY: 7.2,
 };
 
+const COUNTRY_NAMES: Record<string, string> = {
+  US: 'United States (US)',
+  KR: 'South Korea (KR)',
+  JP: 'Japan (JP)',
+  CN: 'China (CN)',
+  TW: 'Taiwan (TW)',
+  GB: 'United Kingdom (GB)',
+  DE: 'Germany (DE)',
+  FR: 'France (FR)',
+  CH: 'Switzerland (CH)',
+  CA: 'Canada (CA)',
+  AU: 'Australia (AU)',
+  IN: 'India (IN)',
+  SA: 'Saudi Arabia (SA)',
+  HK: 'Hong Kong (HK)',
+  NL: 'Netherlands (NL)',
+  DK: 'Denmark (DK)',
+  SE: 'Sweden (SE)',
+  ES: 'Spain (ES)',
+  IT: 'Italy (IT)',
+  BR: 'Brazil (BR)',
+};
+
 const RANK_METRICS: MetricOption[] = [
   { key: 'market_cap_usd', label: 'Market Cap', columnTitle: '시가총액', kind: 'money' },
   { key: 'earnings_usd', label: 'Earnings', columnTitle: '순이익 (TTM)', kind: 'money' },
@@ -290,6 +313,7 @@ export default function HomePage() {
   const [assetFilter, setAssetFilter] = useState<'ALL' | AssetType>('ALL');
   const [rankBy, setRankBy] = useState<RankMetricKey>('market_cap_usd');
   const [category, setCategory] = useState<string>('All Categories');
+  const [country, setCountry] = useState<string>('ALL');
   const [search, setSearch] = useState<string>('');
 
   const activeMetric = useMemo(
@@ -330,6 +354,23 @@ export default function HomePage() {
     };
   }, []);
 
+  const countryOptions = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of snapshot?.rankings || []) {
+      const code = String(item.country_code || '').trim().toUpperCase();
+      if (code) {
+        counts[code] = (counts[code] || 0) + 1;
+      }
+    }
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([code, count]) => ({
+        code,
+        count,
+        label: COUNTRY_NAMES[code] || code,
+      }));
+  }, [snapshot]);
+
   const filteredAndSortedItems = useMemo(() => {
     const list = snapshot?.rankings || [];
     const q = search.trim().toLowerCase();
@@ -337,6 +378,10 @@ export default function HomePage() {
     const filtered = list.filter((item) => {
       if (assetFilter !== 'ALL' && item.asset_type !== assetFilter) {
         return false;
+      }
+      if (country !== 'ALL') {
+        const itemCountry = String(item.country_code || '').trim().toUpperCase();
+        if (itemCountry !== country) return false;
       }
       if (!matchCategory(item, category)) {
         return false;
@@ -365,7 +410,7 @@ export default function HomePage() {
       if (!bValid) return -1;
       return Number(bv) - Number(av);
     });
-  }, [snapshot, assetFilter, category, search, rankBy]);
+  }, [snapshot, assetFilter, country, category, search, rankBy]);
 
   const totalMarketCapDisplay = useMemo(() => {
     const sumUsd = filteredAndSortedItems.reduce(
@@ -395,6 +440,19 @@ export default function HomePage() {
               {CATEGORIES.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat === 'All Categories' ? 'Ranking by categories' : cat}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="By country"
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="ALL">By country</option>
+              {countryOptions.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.label} ({c.count})
                 </option>
               ))}
             </select>
