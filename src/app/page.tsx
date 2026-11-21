@@ -62,6 +62,13 @@ interface DailySnapshot {
   rankings: RankingItem[];
 }
 
+interface CategoryRule {
+  label: string;
+  keywords: string[];
+  tickers?: string[];
+  assetTypes?: AssetType[];
+}
+
 const DEFAULT_R2_BASE_URL =
   'https://pub-abab619513474306a997568b43202499.r2.dev';
 
@@ -118,18 +125,282 @@ const RANK_METRICS: MetricOption[] = [
   { key: 'pb_ratio', label: 'Price to Book', columnTitle: 'PBR', kind: 'ratio' },
 ];
 
-const CATEGORIES = [
-  'All Categories',
-  'Technology',
-  'Semiconductors',
-  'Financials',
-  'Healthcare',
-  'Consumer',
-  'Energy',
-  'Industrials',
-  'Exchange Traded Fund',
-  'Cryptocurrency',
+const CATEGORY_RULES: CategoryRule[] = [
+  {
+    label: 'AI',
+    keywords: [
+      'artificial intelligence', 'ai ', ' ai', 'generative ai', 'machine learning',
+      'neural', 'openai', 'anthropic', 'palantir', 'super micro', 'smci',
+    ],
+    tickers: ['NVDA', 'MSFT', 'GOOGL', 'META', 'AVGO', 'TSM', 'AMD', 'PLTR', 'ARM', 'SMCI', 'ORCL'],
+  },
+  {
+    label: 'Semiconductors',
+    keywords: [
+      'semiconductor', 'chip', 'wafer', 'foundry', 'lithography', 'memory',
+      'dram', 'nand', 'microchip', 'integrated circuit',
+    ],
+    tickers: ['NVDA', 'TSM', 'AVGO', 'ASML', 'AMD', 'QCOM', 'TXN', 'INTC', 'MU', 'AMAT', 'LRCX', 'KLAC', 'ARM', '005930.KS', '000660.KS'],
+  },
+  {
+    label: 'Software',
+    keywords: [
+      'software', 'saas', 'cloud', 'enterprise software', 'application software',
+      'infrastructure software', 'cybersecurity', 'operating system', 'database',
+    ],
+    tickers: ['MSFT', 'ORCL', 'CRM', 'SAP', 'ADBE', 'NOW', 'INTU', 'PLTR', 'SNOW', 'PANW', 'CRWD'],
+  },
+  {
+    label: 'Tech',
+    keywords: [
+      'technology', 'hardware', 'consumer electronics', 'computer', 'server',
+      'electronics', 'information technology',
+    ],
+    tickers: ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'META', 'AVGO', 'TSM', '005930.KS'],
+  },
+  {
+    label: 'Internet',
+    keywords: [
+      'internet', 'search engine', 'social media', 'digital media', 'streaming',
+      'online media', 'advertising', 'alphabet', 'meta platforms',
+    ],
+    tickers: ['GOOGL', 'META', 'NFLX', 'SPOT', 'UBER', 'ABNB', 'BKNG'],
+  },
+  {
+    label: 'E-Commerce',
+    keywords: [
+      'e-commerce', 'ecommerce', 'online retail', 'marketplace', 'amazon',
+      'alibaba', 'pinduoduo', 'mercadolibre', 'shopify', 'coupang',
+    ],
+    tickers: ['AMZN', 'BABA', 'PDD', 'MELI', 'SHOP', 'JD'],
+  },
+  {
+    label: 'Retail',
+    keywords: [
+      'retail', 'department store', 'hypermarket', 'supermarket', 'discount store',
+      'warehouse club', 'home improvement', 'apparel retail', 'specialty retail',
+    ],
+    tickers: ['WMT', 'COST', 'HD', 'LOW', 'TJX', 'TGT', 'AMZN'],
+  },
+  {
+    label: 'Automakers',
+    keywords: [
+      'auto manufacturers', 'automaker', 'automobile', 'electric vehicle', 'ev ',
+      'motor vehicle', 'car ', 'vehicles', 'ferrari', 'toyota', 'tesla', 'byd',
+    ],
+    tickers: ['TSLA', '7203.T', 'RACE', 'BYDDY', 'TM', 'HMC', '005380.KS'],
+  },
+  {
+    label: 'Banks',
+    keywords: [
+      'banks—diversified', 'banks—regional', 'bank', 'banking', 'commercial bank',
+      'jpmorgan', 'bank of america', 'wells fargo', 'citigroup', 'hsbc',
+    ],
+    tickers: ['JPM', 'BAC', 'WFC', 'C', 'HSBC', 'RY', 'TD', 'UBS', '105560.KS', '055550.KS'],
+  },
+  {
+    label: 'Investment',
+    keywords: [
+      'asset management', 'investment banking', 'capital markets', 'private equity',
+      'wealth management', 'brokerage', 'blackrock', 'goldman sachs', 'morgan stanley',
+    ],
+    tickers: ['BRK-B', 'BLK', 'GS', 'MS', 'BX', 'SCHW', 'KKR'],
+  },
+  {
+    label: 'Financial services',
+    keywords: [
+      'financial services', 'credit services', 'payment', 'fintech',
+      'financial data', 'stock exchanges',
+    ],
+    tickers: ['V', 'MA', 'BRK-B', 'AXP', 'PYPL', 'FISV'],
+  },
+  {
+    label: 'Insurance',
+    keywords: [
+      'insurance', 'life insurance', 'property & casualty', 'reinsurance',
+      'insurer', 'allianz', 'aia', 'progressive', 'chubb',
+    ],
+    tickers: ['BRK-B', 'PGR', 'CB', 'MMC', 'UNH', 'AIAGY', 'ALV.DE'],
+  },
+  {
+    label: 'Pharmaceuticals',
+    keywords: [
+      'drug manufacturers', 'pharmaceutical', 'pharma', 'biotechnology', 'biotech',
+      'eli lilly', 'novo nordisk', 'johnson & johnson', 'abbvie', 'merck', 'astrazeneca',
+    ],
+    tickers: ['LLY', 'NVO', 'JNJ', 'ABBV', 'MRK', 'AZN', 'NVS', 'SNY', '207940.KS'],
+  },
+  {
+    label: 'Healthcare',
+    keywords: [
+      'healthcare', 'health care', 'medical devices', 'diagnostics', 'hospitals',
+      'health plan', 'medical instruments', 'unitedhealth',
+    ],
+    tickers: ['UNH', 'JNJ', 'LLY', 'ABT', 'TMO', 'ISRG', 'SYK', 'MDT'],
+  },
+  {
+    label: 'Oil&Gas',
+    keywords: [
+      'oil & gas', 'integrated oil', 'oil and gas', 'petroleum', 'energy',
+      'refining', 'lng', 'exxon', 'chevron', 'aramco', 'shell',
+    ],
+    tickers: ['2222.SR', 'XOM', 'CVX', 'SHEL', 'TTE', 'COP'],
+  },
+  {
+    label: 'Electricity',
+    keywords: [
+      'utilities—regulated electric', 'utilities—renewable', 'electric utilities',
+      'power', 'electricity', 'grid', 'nextera', 'duke energy',
+    ],
+    tickers: ['NEE', 'DUK', 'SO', 'CEG', 'AEP'],
+  },
+  {
+    label: 'Chemicals',
+    keywords: [
+      'chemicals', 'specialty chemicals', 'agricultural inputs', 'industrial gases',
+      'linde', 'sherwin-williams',
+    ],
+    tickers: ['LIN', 'SHW', 'ECL', 'APD'],
+  },
+  {
+    label: 'Mining',
+    keywords: [
+      'gold', 'copper', 'mining', 'metals & mining', 'steel', 'aluminum',
+      'bhp', 'rio tinto', 'newmont', 'southern copper',
+    ],
+    tickers: ['BHP', 'RIO', 'NEM', 'SCCO', 'FCX', 'VALE'],
+  },
+  {
+    label: 'Food',
+    keywords: [
+      'packaged foods', 'food products', 'confectioners', 'dairy', 'farm products',
+      'nestle', 'mondelez', 'danone',
+    ],
+    tickers: ['NESN.SW', 'MDLZ', 'PG', 'KO', 'PEP', 'GIS'],
+  },
+  {
+    label: 'Beverages',
+    keywords: [
+      'beverages—non-alcoholic', 'beverage', 'soft drink', 'coca-cola', 'pepsico',
+      'monster beverage',
+    ],
+    tickers: ['KO', 'PEP', 'MNST', 'KDP'],
+  },
+  {
+    label: 'Alcoholic beverages',
+    keywords: [
+      'beverages—brewers', 'beverages—wineries', 'distillers', 'beer', 'brewery',
+      'wine', 'spirits', 'diageo', 'anheuser-busch',
+    ],
+    tickers: ['BUD', 'DEO', 'STZ', 'HEIA.AS'],
+  },
+  {
+    label: 'Tobacco',
+    keywords: ['tobacco', 'cigarette', 'philip morris', 'altria', 'british american tobacco'],
+    tickers: ['PM', 'MO', 'BTI'],
+  },
+  {
+    label: 'Restaurant chains',
+    keywords: [
+      'restaurants', 'restaurant', 'fast food', 'coffee', 'mcdonald', 'starbucks',
+      'chipotle',
+    ],
+    tickers: ['MCD', 'CMG', 'SBUX', 'YUM', 'QSR'],
+  },
+  {
+    label: 'Clothing',
+    keywords: [
+      'apparel manufacturing', 'footwear', 'clothing', 'luxury goods', 'fashion',
+      'nike', 'lvmh', 'hermes', 'adidas', 'inditex',
+    ],
+    tickers: ['MC.PA', 'RMS.PA', 'NKE', 'ITX.MC', 'LULU', 'TJX'],
+  },
+  {
+    label: 'Hotels',
+    keywords: ['lodging', 'hotel', 'hotels', 'resorts', 'hospitality', 'marriott', 'hilton', 'airbnb'],
+    tickers: ['MAR', 'HLT', 'ABNB', 'IHG'],
+  },
+  {
+    label: 'Airlines',
+    keywords: ['airlines', 'airline', 'air carrier', 'aviation passenger', 'delta', 'united airlines'],
+    tickers: ['DAL', 'UAL', 'RYAAY', 'LUV'],
+  },
+  {
+    label: 'Airports',
+    keywords: ['airports', 'airport services', 'aena'],
+    tickers: ['AENA.MC', 'ADP.PA'],
+  },
+  {
+    label: 'Aircraft manufacturers',
+    keywords: ['aerospace & defense', 'aircraft', 'aerospace', 'boeing', 'airbus', 'ge aerospace', 'rtx'],
+    tickers: ['GE', 'RTX', 'AIR.PA', 'BA', 'LMT', 'NOC'],
+  },
+  {
+    label: 'Railways',
+    keywords: ['railroads', 'railway', 'rail ', 'union pacific', 'csx', 'norfolk southern', 'canadian national'],
+    tickers: ['UNP', 'CSX', 'NSC', 'CNI', 'CP'],
+  },
+  {
+    label: 'Courier services',
+    keywords: ['integrated freight & logistics', 'courier', 'parcel', 'delivery', 'ups', 'fedex'],
+    tickers: ['UPS', 'FDX', 'DPW.DE'],
+  },
+  {
+    label: 'Ports',
+    keywords: ['marine shipping', 'ports', 'container shipping', 'maersk'],
+    tickers: ['MAERSK-B.CO', 'COSCO'],
+  },
+  {
+    label: 'Real estate',
+    keywords: ['real estate', 'reit', 'property', 'prologis', 'american tower', 'equinix', 'welltower'],
+    tickers: ['PLD', 'AMT', 'EQIX', 'WELL', 'SPG', 'O'],
+  },
+  {
+    label: 'Construction',
+    keywords: ['engineering & construction', 'construction', 'building materials', 'cement', 'vinci'],
+    tickers: ['VINC.PA', 'CRH', 'VMC', 'MLM'],
+  },
+  {
+    label: 'Telecommunication',
+    keywords: [
+      'telecom services', 'telecommunication', 'wireless', 'mobile carrier',
+      'verizon', 'at&t', 't-mobile', 'deutsche telekom',
+    ],
+    tickers: ['TMUS', 'VZ', 'T', 'DTE.DE', 'SBAC'],
+  },
+  {
+    label: 'Media/Press',
+    keywords: ['broadcasting', 'publishing', 'media', 'press', 'news', 'entertainment', 'disney', 'comcast'],
+    tickers: ['DIS', 'CMCSA', 'NFLX', 'FOXA', 'NWSA'],
+  },
+  {
+    label: 'Video Game',
+    keywords: ['electronic gaming & multimedia', 'video game', 'gaming', 'esports', 'nintendo', 'activision', 'take-two'],
+    tickers: ['7974.T', 'TTWO', 'EA', 'RBLX', 'NTDOY'],
+  },
+  {
+    label: 'Professional services',
+    keywords: [
+      'consulting services', 'staffing & employment services', 'specialty business services',
+      'professional services', 'accounting', 'accenture',
+    ],
+    tickers: ['ACN', 'ADP', 'CTAS', 'IT', 'RELX'],
+  },
+  {
+    label: 'Exchange Traded Fund',
+    keywords: ['exchange traded fund', 'etf'],
+    assetTypes: ['ETF'],
+    tickers: ['SPY', 'IVV', 'VOO', 'QQQ', 'VTI'],
+  },
+  {
+    label: 'Cryptocurrency',
+    keywords: ['cryptocurrency', 'crypto', 'bitcoin', 'ethereum', 'digital asset'],
+    assetTypes: ['CRYPTO'],
+    tickers: ['BTC', 'ETH', 'SOL', 'XRP', 'BNB'],
+  },
 ];
+
+const CATEGORIES = ['All Categories', ...CATEGORY_RULES.map((r) => r.label)];
 
 function normalizeFxRate(
   currency: CurrencyCode,
@@ -253,25 +524,21 @@ function formatMetricCell(
 
 function matchCategory(item: RankingItem, selectedCategory: string): boolean {
   if (!selectedCategory || selectedCategory === 'All Categories') return true;
-  const atype = String(item.asset_type || '').toUpperCase();
-  if (selectedCategory === 'Exchange Traded Fund') return atype === 'ETF';
-  if (selectedCategory === 'Cryptocurrency') return atype === 'CRYPTO';
+  const rule = CATEGORY_RULES.find((r) => r.label === selectedCategory);
+  if (!rule) return true;
 
-  const text = `${item.sector || ''} ${item.industry || ''} ${item.name || ''}`.toLowerCase();
-  const key = selectedCategory.toLowerCase();
-  if (key === 'financials') {
-    return text.includes('financ') || text.includes('bank') || text.includes('insurance');
+  const atype = String(item.asset_type || '').toUpperCase() as AssetType;
+  if (rule.assetTypes && rule.assetTypes.includes(atype)) {
+    return true;
   }
-  if (key === 'consumer') {
-    return (
-      text.includes('consumer') ||
-      text.includes('retail') ||
-      text.includes('auto') ||
-      text.includes('beverage') ||
-      text.includes('food')
-    );
+
+  const tickerUp = String(item.ticker || '').trim().toUpperCase();
+  if (rule.tickers && rule.tickers.includes(tickerUp)) {
+    return true;
   }
-  return text.includes(key);
+
+  const haystack = `${item.sector || ''} ${item.industry || ''} ${item.name || ''}`.toLowerCase();
+  return rule.keywords.some((kw) => haystack.includes(kw.toLowerCase()));
 }
 
 function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
