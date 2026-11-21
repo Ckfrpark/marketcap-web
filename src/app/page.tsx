@@ -5,6 +5,28 @@ import React, { useEffect, useMemo, useState } from 'react';
 type AssetType = 'STOCK' | 'ETF' | 'CRYPTO';
 type CurrencyCode = 'USD' | 'KRW' | 'EUR' | 'JPY' | 'CNY';
 
+type RankMetricKey =
+  | 'market_cap_usd'
+  | 'earnings_usd'
+  | 'revenue_usd'
+  | 'employees'
+  | 'pe_ratio'
+  | 'dividend_yield'
+  | 'operating_margin'
+  | 'total_assets_usd'
+  | 'net_assets_usd'
+  | 'total_liabilities_usd'
+  | 'total_debt_usd'
+  | 'total_cash_usd'
+  | 'pb_ratio';
+
+interface MetricOption {
+  key: RankMetricKey;
+  label: string;
+  columnTitle: string;
+  kind: 'money' | 'integer' | 'ratio' | 'percent';
+}
+
 interface RankingItem {
   rank: number;
   ticker: string;
@@ -18,6 +40,18 @@ interface RankingItem {
   sparkline_30d: number[];
   sector?: string;
   industry?: string;
+  revenue_usd?: number | null;
+  earnings_usd?: number | null;
+  employees?: number | null;
+  pe_ratio?: number | null;
+  dividend_yield?: number | null;
+  operating_margin?: number | null;
+  total_assets_usd?: number | null;
+  total_liabilities_usd?: number | null;
+  net_assets_usd?: number | null;
+  total_debt_usd?: number | null;
+  total_cash_usd?: number | null;
+  pb_ratio?: number | null;
 }
 
 interface DailySnapshot {
@@ -39,11 +73,27 @@ const CURRENCY_BUTTONS: CurrencyCode[] = ['USD', 'KRW', 'EUR', 'JPY', 'CNY'];
 
 const DEFAULT_FX_RATES: Record<CurrencyCode, number> = {
   USD: 1,
-  KRW: 1350, // 1 USD = 약 1,350 KRW
+  KRW: 1350,
   EUR: 0.92,
   JPY: 150,
   CNY: 7.2,
 };
+
+const RANK_METRICS: MetricOption[] = [
+  { key: 'market_cap_usd', label: 'Market Cap', columnTitle: '시가총액', kind: 'money' },
+  { key: 'earnings_usd', label: 'Earnings', columnTitle: '순이익 (TTM)', kind: 'money' },
+  { key: 'revenue_usd', label: 'Revenue', columnTitle: '매출 (TTM)', kind: 'money' },
+  { key: 'employees', label: 'Employees', columnTitle: '직원 수', kind: 'integer' },
+  { key: 'pe_ratio', label: 'P/E ratio', columnTitle: 'P/E ratio', kind: 'ratio' },
+  { key: 'dividend_yield', label: 'Dividend %', columnTitle: '배당수익률', kind: 'percent' },
+  { key: 'operating_margin', label: 'Operating Margin', columnTitle: '영업이익률', kind: 'percent' },
+  { key: 'total_assets_usd', label: 'Total assets', columnTitle: '총자산', kind: 'money' },
+  { key: 'net_assets_usd', label: 'Net assets', columnTitle: '순자산', kind: 'money' },
+  { key: 'total_liabilities_usd', label: 'Total liabilities', columnTitle: '총부채(부채총계)', kind: 'money' },
+  { key: 'total_debt_usd', label: 'Total debt', columnTitle: '총차입부채', kind: 'money' },
+  { key: 'total_cash_usd', label: 'Cash on hand', columnTitle: '현금성자산', kind: 'money' },
+  { key: 'pb_ratio', label: 'Price to Book', columnTitle: 'PBR', kind: 'ratio' },
+];
 
 const CATEGORIES = [
   'All Categories',
@@ -81,14 +131,13 @@ function convertUsdToCurrency(
   const safeUsd = Number(amountUsd || 0);
   if (!Number.isFinite(safeUsd) || safeUsd === 0) return 0;
   if (currency === 'USD') return safeUsd;
-  const unitsPerUsd = normalizeFxRate(currency, fxRates);
-  return safeUsd * unitsPerUsd;
+  return safeUsd * normalizeFxRate(currency, fxRates);
 }
 
 function formatBil(amountUsd: number): string {
   const bil = Number(amountUsd || 0) / 1e9;
   if (!Number.isFinite(bil)) return '$0.0 bil';
-  if (bil >= 10) {
+  if (Math.abs(bil) >= 10) {
     return `$${Math.round(bil).toLocaleString('en-US')} bil`;
   }
   return `$${bil.toLocaleString('en-US', {
@@ -97,23 +146,27 @@ function formatBil(amountUsd: number): string {
   })} bil`;
 }
 
-function formatMarketCap(
-  amountUsd: number,
+function formatMoneyMetric(
+  amountUsd: number | null | undefined,
   currency: CurrencyCode,
   fxRates: Record<string, number> | undefined
 ): string {
+  if (amountUsd === null || amountUsd === undefined || !Number.isFinite(Number(amountUsd))) {
+    return '-';
+  }
+  const numUsd = Number(amountUsd);
   if (currency === 'USD') {
-    return formatBil(amountUsd);
+    return formatBil(numUsd);
   }
 
-  const converted = convertUsdToCurrency(amountUsd, currency, fxRates);
+  const converted = convertUsdToCurrency(numUsd, currency, fxRates);
 
   if (currency === 'KRW') {
-    const jo = converted / 1_000_000_000_000; // 1조 원 = 10^12
+    const jo = converted / 1_000_000_000_000;
     if (Math.abs(jo) >= 1) {
       return `₩${Math.round(jo).toLocaleString('ko-KR')}조`;
     }
-    const eok = converted / 100_000_000; // 1억 원 = 10^8
+    const eok = converted / 100_000_000;
     return `₩${Math.round(eok).toLocaleString('ko-KR')}억`;
   }
 
@@ -127,9 +180,9 @@ function formatMarketCap(
   }
 
   const symbol = currency === 'EUR' ? '€' : '¥';
-  if (converted >= 1e12) return `${symbol}${(converted / 1e12).toFixed(2)}T`;
-  if (converted >= 1e9) return `${symbol}${(converted / 1e9).toFixed(1)}B`;
-  if (converted >= 1e6) return `${symbol}${(converted / 1e6).toFixed(1)}M`;
+  if (Math.abs(converted) >= 1e12) return `${symbol}${(converted / 1e12).toFixed(2)}T`;
+  if (Math.abs(converted) >= 1e9) return `${symbol}${(converted / 1e9).toFixed(1)}B`;
+  if (Math.abs(converted) >= 1e6) return `${symbol}${(converted / 1e6).toFixed(1)}M`;
   return `${symbol}${converted.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 }
 
@@ -150,6 +203,29 @@ function formatPrice(
     minimumFractionDigits: val < 1 ? 4 : 2,
     maximumFractionDigits: val < 1 ? 4 : 2,
   })}`;
+}
+
+function formatMetricCell(
+  item: RankingItem,
+  metric: MetricOption,
+  currency: CurrencyCode,
+  fxRates: Record<string, number> | undefined
+): string {
+  const raw = item[metric.key];
+  if (raw === null || raw === undefined || !Number.isFinite(Number(raw))) {
+    return '-';
+  }
+  const num = Number(raw);
+  if (metric.kind === 'money') {
+    return formatMoneyMetric(num, currency, fxRates);
+  }
+  if (metric.kind === 'integer') {
+    return Math.round(num).toLocaleString('en-US');
+  }
+  if (metric.kind === 'percent') {
+    return `${num.toFixed(2)}%`;
+  }
+  return num.toFixed(2);
 }
 
 function matchCategory(item: RankingItem, selectedCategory: string): boolean {
@@ -212,8 +288,14 @@ export default function HomePage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [currency, setCurrency] = useState<CurrencyCode>('USD');
   const [assetFilter, setAssetFilter] = useState<'ALL' | AssetType>('ALL');
+  const [rankBy, setRankBy] = useState<RankMetricKey>('market_cap_usd');
   const [category, setCategory] = useState<string>('All Categories');
   const [search, setSearch] = useState<string>('');
+
+  const activeMetric = useMemo(
+    () => RANK_METRICS.find((m) => m.key === rankBy) || RANK_METRICS[0],
+    [rankBy]
+  );
 
   useEffect(() => {
     let active = true;
@@ -248,10 +330,11 @@ export default function HomePage() {
     };
   }, []);
 
-  const filteredItems = useMemo(() => {
+  const filteredAndSortedItems = useMemo(() => {
     const list = snapshot?.rankings || [];
     const q = search.trim().toLowerCase();
-    return list.filter((item) => {
+
+    const filtered = list.filter((item) => {
       if (assetFilter !== 'ALL' && item.asset_type !== assetFilter) {
         return false;
       }
@@ -265,15 +348,32 @@ export default function HomePage() {
       }
       return true;
     });
-  }, [snapshot, assetFilter, category, search]);
+
+    if (rankBy === 'market_cap_usd') {
+      return [...filtered].sort(
+        (a, b) => Number(b.market_cap_usd || 0) - Number(a.market_cap_usd || 0)
+      );
+    }
+
+    return [...filtered].sort((a, b) => {
+      const av = a[rankBy];
+      const bv = b[rankBy];
+      const aValid = av !== null && av !== undefined && Number.isFinite(Number(av));
+      const bValid = bv !== null && bv !== undefined && Number.isFinite(Number(bv));
+      if (!aValid && !bValid) return 0;
+      if (!aValid) return 1;
+      if (!bValid) return -1;
+      return Number(bv) - Number(av);
+    });
+  }, [snapshot, assetFilter, category, search, rankBy]);
 
   const totalMarketCapDisplay = useMemo(() => {
-    const sumUsd = filteredItems.reduce(
+    const sumUsd = filteredAndSortedItems.reduce(
       (acc, cur) => acc + Number(cur.market_cap_usd || 0),
       0
     );
-    return formatMarketCap(sumUsd, currency, snapshot?.fx_rates);
-  }, [filteredItems, currency, snapshot?.fx_rates]);
+    return formatMoneyMetric(sumUsd, currency, snapshot?.fx_rates);
+  }, [filteredAndSortedItems, currency, snapshot?.fx_rates]);
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 px-4 py-6 md:px-8">
@@ -333,7 +433,7 @@ export default function HomePage() {
           <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
             <p className="text-xs text-slate-400">집계 자산 수</p>
             <p className="mt-2 text-2xl md:text-3xl font-bold text-white">
-              {filteredItems.length.toLocaleString('en-US')} 개
+              {filteredAndSortedItems.length.toLocaleString('en-US')} 개
             </p>
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
@@ -341,6 +441,29 @@ export default function HomePage() {
             <p className="mt-2 text-2xl md:text-3xl font-bold text-indigo-400">
               {snapshot?.date || '-'}
             </p>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-slate-400 mr-1">Rank by</span>
+            {RANK_METRICS.map((m) => {
+              const selected = rankBy === m.key;
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setRankBy(m.key)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                    selected
+                      ? 'bg-indigo-600 text-white border border-indigo-500'
+                      : 'bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-800'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
           </div>
         </section>
 
@@ -392,7 +515,13 @@ export default function HomePage() {
                 <th className="py-3.5 px-4">자산명</th>
                 <th className="py-3.5 px-4">국가</th>
                 <th className="py-3.5 px-4 text-right">주가</th>
-                <th className="py-3.5 px-4 text-right">시가총액 ({currency})</th>
+                <th className="py-3.5 px-4 text-right">
+                  {activeMetric.columnTitle}
+                  {activeMetric.kind === 'money' ? ` (${currency})` : ''}
+                </th>
+                {activeMetric.key !== 'market_cap_usd' && (
+                  <th className="py-3.5 px-4 text-right">시가총액 ({currency})</th>
+                )}
                 <th className="py-3.5 px-4 text-right">24h</th>
                 <th className="py-3.5 px-4 text-right">30d</th>
               </tr>
@@ -400,18 +529,24 @@ export default function HomePage() {
             <tbody className="divide-y divide-slate-800/70 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-slate-400">
+                  <td
+                    colSpan={activeMetric.key !== 'market_cap_usd' ? 8 : 7}
+                    className="py-10 text-center text-slate-400"
+                  >
                     데이터를 불러오는 중입니다...
                   </td>
                 </tr>
-              ) : filteredItems.length === 0 ? (
+              ) : filteredAndSortedItems.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-slate-400">
+                  <td
+                    colSpan={activeMetric.key !== 'market_cap_usd' ? 8 : 7}
+                    className="py-10 text-center text-slate-400"
+                  >
                     조건에 맞는 자산이 없습니다.
                   </td>
                 </tr>
               ) : (
-                filteredItems.slice(0, 200).map((item, idx) => {
+                filteredAndSortedItems.slice(0, 200).map((item, idx) => {
                   const pos = Number(item.change_pct || 0) >= 0;
                   return (
                     <tr
@@ -430,12 +565,17 @@ export default function HomePage() {
                         {formatPrice(item.price_usd, currency, snapshot?.fx_rates)}
                       </td>
                       <td className="py-3.5 px-4 text-right font-semibold text-white">
-                        {formatMarketCap(
-                          item.market_cap_usd,
-                          currency,
-                          snapshot?.fx_rates
-                        )}
+                        {formatMetricCell(item, activeMetric, currency, snapshot?.fx_rates)}
                       </td>
+                      {activeMetric.key !== 'market_cap_usd' && (
+                        <td className="py-3.5 px-4 text-right text-slate-300">
+                          {formatMoneyMetric(
+                            item.market_cap_usd,
+                            currency,
+                            snapshot?.fx_rates
+                          )}
+                        </td>
+                      )}
                       <td
                         className={`py-3.5 px-4 text-right font-medium ${
                           pos ? 'text-emerald-400' : 'text-rose-400'
