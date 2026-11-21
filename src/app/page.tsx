@@ -1,8 +1,7 @@
-import Link from 'next/link';
-
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 
 type AssetType = 'STOCK' | 'ETF' | 'CRYPTO';
 type CurrencyCode = 'USD' | 'KRW' | 'EUR' | 'JPY' | 'CNY';
@@ -882,8 +881,15 @@ export default function HomePage() {
                     >
                       <td className="py-3.5 px-4 text-slate-400">{idx + 1}</td>
                       <td className="py-3.5 px-4">
-                        <div className="font-semibold text-white">{item.name}</div>
-                        <div className="text-xs text-slate-400">{item.ticker}</div>
+                        <Link
+                          href={`/asset/${encodeURIComponent(item.asset_type)}/${encodeURIComponent(item.ticker)}`}
+                          className="group inline-block"
+                        >
+                          <div className="font-semibold text-white group-hover:text-indigo-400 group-hover:underline transition">
+                            {item.name}
+                          </div>
+                          <div className="text-xs text-slate-400">{item.ticker}</div>
+                        </Link>
                       </td>
                       <td className="py-3.5 px-4 text-slate-300">
                         {item.country_code || '-'}
