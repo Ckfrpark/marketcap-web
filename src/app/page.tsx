@@ -23,6 +23,8 @@ type SnapshotPayload = {
   rankings?: RankingAssetItem[];
 };
 
+const DEFAULT_R2_BASE_URL = "https://pub-abab619513474306a997568b43202499.r2.dev";
+
 const COUNTRY_REGIONS: {
   title: string;
   items: { code: string; name: string }[];
@@ -86,12 +88,37 @@ const COUNTRY_REGIONS: {
 const EU_MEMBER_CODES = ["DE", "FR", "ES", "NL", "SE", "IT", "PL", "FI"];
 const CURRENCIES = ["USD", "KRW", "EUR", "JPY", "CNY"] as const;
 
-function formatCompactCurrency(usdValue: number, currency: string, fxRates?: Record<string, number>): string {
+function resolveR2BaseUrl(): string {
+  const fromEnv =
+    process.env.NEXT_PUBLIC_R2_BASE_URL ||
+    process.env.NEXT_PUBLIC_R2_PUBLIC_URL ||
+    process.env.NEXT_PUBLIC_R2_URL ||
+    "";
+  const cleaned = fromEnv.trim().replace(/\/$/, "");
+  if (cleaned) {
+    return cleaned.replace(/\/snapshots\/rankings\/latest\.json$/i, "");
+  }
+  return DEFAULT_R2_BASE_URL;
+}
+
+function formatCompactCurrency(
+  usdValue: number,
+  currency: string,
+  fxRates?: Record<string, number>
+): string {
   const code = (currency || "USD").toUpperCase();
   const rate = code === "USD" ? 1 : Number(fxRates?.[code] || 1);
   const converted = usdValue * rate;
   const prefix =
-    code === "KRW" ? "₩" : code === "EUR" ? "€" : code === "JPY" ? "¥" : code === "CNY" ? "CN¥" : "$";
+    code === "KRW"
+      ? "₩"
+      : code === "EUR"
+      ? "€"
+      : code === "JPY"
+      ? "¥"
+      : code === "CNY"
+      ? "CN¥"
+      : "$";
 
   const absVal = Math.abs(converted);
   if (absVal >= 1e12) return `${prefix}${(converted / 1e12).toFixed(2)} T`;
@@ -110,22 +137,21 @@ export default function HomePage() {
   const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    const envBase = (process.env.NEXT_PUBLIC_R2_PUBLIC_URL || "").trim().replace(/\/$/, "");
+    const r2Base = resolveR2BaseUrl();
     const candidateUrls = [
-      envBase ? `${envBase}/snapshots/rankings/latest.json` : "",
-      "/api/snapshots/rankings/latest.json",
-      "/snapshots/rankings/latest.json",
-    ].filter(Boolean);
+      `${r2Base}/snapshots/rankings/latest.json`,
+      `${r2Base}/snapshots/rankings/2026-11-21.json`,
+    ];
 
     let cancelled = false;
     (async () => {
       setLoading(true);
       for (const url of candidateUrls) {
         try {
-          const res = await fetch(url, { cache: "no-store" });
+          const res = await fetch(`${url}?t=${Date.now()}`, { cache: "no-store" });
           if (res.ok) {
             const data = await res.json();
-            if (!cancelled && data && Array.isArray(data.rankings)) {
+            if (!cancelled && data && Array.isArray(data.rankings) && data.rankings.length > 0) {
               setSnapshot(data);
               setLoading(false);
               return;
