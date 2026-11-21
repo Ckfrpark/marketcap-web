@@ -83,7 +83,7 @@ const COUNTRY_REGIONS: {
 
 const EU_MEMBER_CODES = ["DE", "FR", "ES", "NL", "SE", "IT", "PL", "FI"];
 
-export function CountryDropdownMenu({
+function CountryDropdownMenu({
   rankings,
   selectedCountry,
   onSelectCountry,
@@ -94,30 +94,36 @@ export function CountryDropdownMenu({
   onSelectCountry: (code: string) => void;
   onSelectAllCountries?: () => void;
 }) {
-  const stockCountByCountry = new Map<string, number>();
-  for (const row of rankings || []) {
-    if (row.asset_type === "STOCK" && row.country_code) {
-      const code = String(row.country_code).toUpperCase().trim();
-      stockCountByCountry.set(code, (stockCountByCountry.get(code) || 0) + 1);
+  const availableCountryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of rankings || []) {
+      const code = String(row.country_code || "").trim().toUpperCase();
+      if (!code) continue;
+      counts.set(code, (counts.get(code) || 0) + 1);
     }
-  }
+    return counts;
+  }, [rankings]);
 
-  const isCountryVisible = (code: string): boolean => {
-    const upper = code.toUpperCase().trim();
+  const hasCountryInList = (code: string): boolean => {
+    if (!rankings || rankings.length === 0) return true;
+    const upper = String(code || "").trim().toUpperCase();
+    if (!upper) return false;
     if (upper === "EU") {
-      return EU_MEMBER_CODES.some((member) => (stockCountByCountry.get(member) || 0) >= 2);
+      return EU_MEMBER_CODES.some((member) => (availableCountryCounts.get(member) || 0) > 0);
     }
-    return (stockCountByCountry.get(upper) || 0) >= 2;
+    return (availableCountryCounts.get(upper) || 0) > 0;
   };
 
-  const visibleRegions = COUNTRY_REGIONS.map((region) => ({
-    ...region,
-    items: region.items.filter((item) => isCountryVisible(item.code)),
-  })).filter((region) => region.items.length > 0);
+  const filteredCountryRegions = useMemo(() => {
+    return COUNTRY_REGIONS.map((region) => ({
+      ...region,
+      items: region.items.filter((item) => hasCountryInList(item.code)),
+    })).filter((region) => region.items.length > 0);
+  }, [rankings, availableCountryCounts]);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 p-6 rounded-xl bg-[#0b1020] border border-slate-800 shadow-2xl">
-      {visibleRegions.map((region, idx) => (
+      {filteredCountryRegions.map((region, idx) => (
         <div key={region.title} className="space-y-3">
           <div className="text-xs font-semibold tracking-wider text-slate-400 uppercase pb-2 border-b border-slate-800">
             {region.title}
@@ -144,7 +150,7 @@ export function CountryDropdownMenu({
               );
             })}
           </div>
-          {idx === visibleRegions.length - 1 && onSelectAllCountries && (
+          {idx === filteredCountryRegions.length - 1 && onSelectAllCountries && (
             <button
               type="button"
               onClick={onSelectAllCountries}
@@ -166,11 +172,11 @@ export default function HomePage() {
 
   useEffect(() => {
     const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || "";
-    const url = r2Base
-      ? `${r2Base.replace(/\/$/, "")}/snapshots/rankings/2026-11-21.json`
-      : "/snapshots/rankings/2026-11-21.json";
+    const latestUrl = r2Base
+      ? `${r2Base.replace(/\/$/, "")}/snapshots/rankings/latest.json`
+      : "/snapshots/rankings/latest.json";
 
-    fetch(url, { cache: "no-store" })
+    fetch(latestUrl, { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data) setSnapshot(data);
@@ -180,19 +186,36 @@ export default function HomePage() {
 
   const rankings = snapshot?.rankings ?? [];
 
+  useEffect(() => {
+    if (!selectedCountry || rankings.length === 0) return;
+    const target = selectedCountry.toUpperCase();
+    const exists =
+      target === "EU"
+        ? rankings.some(
+            (r) =>
+              r.country_code &&
+              EU_MEMBER_CODES.includes(String(r.country_code).toUpperCase())
+          )
+        : rankings.some(
+            (r) => String(r.country_code || "").toUpperCase() === target
+          );
+    if (!exists) {
+      setSelectedCountry("");
+    }
+  }, [rankings, selectedCountry]);
+
   const filteredItems = useMemo(() => {
     if (!selectedCountry) return rankings;
     const target = selectedCountry.toUpperCase();
     if (target === "EU") {
       return rankings.filter(
         (r) =>
-          r.asset_type === "STOCK" &&
           r.country_code &&
-          EU_MEMBER_CODES.includes(r.country_code.toUpperCase())
+          EU_MEMBER_CODES.includes(String(r.country_code).toUpperCase())
       );
     }
     return rankings.filter(
-      (r) => (r.country_code || "").toUpperCase() === target
+      (r) => String(r.country_code || "").toUpperCase() === target
     );
   }, [rankings, selectedCountry]);
 
