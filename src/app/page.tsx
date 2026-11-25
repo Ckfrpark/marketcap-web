@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import HistoryChart2000 from '@/components/HistoryChart2000';
 
 type AssetType = 'STOCK' | 'ETF' | 'CRYPTO';
 type CurrencyCode = 'USD' | 'KRW' | 'EUR' | 'JPY' | 'CNY';
@@ -583,6 +584,10 @@ export default function HomePage() {
   const [category, setCategory] = useState<string>('All Categories');
   const [country, setCountry] = useState<string>('ALL');
   const [search, setSearch] = useState<string>('');
+  const [chartModalTarget, setChartModalTarget] = useState<{
+    ticker: string;
+    name: string;
+  } | null>(null);
 
   const activeMetric = useMemo(
     () => RANK_METRICS.find((m) => m.key === rankBy) || RANK_METRICS[0],
@@ -621,6 +626,15 @@ export default function HomePage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!chartModalTarget) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setChartModalTarget(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [chartModalTarget]);
 
   const countryOptions = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -918,7 +932,20 @@ export default function HomePage() {
                         {Number(item.change_pct || 0).toFixed(2)}%
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <Sparkline data={item.sparkline_30d || []} positive={pos} />
+                        <button
+                          type="button"
+                          title={`${item.name} (${item.ticker}) 2000년 이후 일간 시가총액 그래프 보기`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setChartModalTarget({
+                              ticker: item.ticker,
+                              name: item.name,
+                            });
+                          }}
+                          className="inline-flex items-center rounded-md px-1.5 py-1 transition hover:bg-slate-800 hover:ring-1 hover:ring-indigo-500/50 cursor-pointer"
+                        >
+                          <Sparkline data={item.sparkline_30d || []} positive={pos} />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -928,6 +955,41 @@ export default function HomePage() {
           </table>
         </section>
       </div>
+
+      {chartModalTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs"
+          onClick={() => setChartModalTarget(null)}
+        >
+          <div
+            className="w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <span className="text-lg font-bold text-white">
+                  {chartModalTarget.name}
+                </span>
+                <span className="ml-2 text-xs font-semibold text-indigo-400">
+                  {chartModalTarget.ticker}
+                </span>
+                <span className="ml-2 text-xs text-slate-400">
+                  · 2000년 이후 일간 시가총액 그래프
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChartModalTarget(null)}
+                className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-slate-700 hover:text-white"
+              >
+                닫기 ✕
+              </button>
+            </div>
+
+            <HistoryChart2000 ticker={chartModalTarget.ticker} />
+          </div>
+        </div>
+      )}
     </main>
   );
 }
