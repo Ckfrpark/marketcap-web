@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -26,6 +25,7 @@ interface HistoryPayload {
 }
 
 type RangeKey = '1Y' | '5Y' | '10Y' | 'ALL';
+type MetricMode = 'auto' | 'market_cap_usd' | 'price_usd';
 
 const R2_BASE_URL =
   process.env.NEXT_PUBLIC_R2_PUBLIC_URL ||
@@ -46,17 +46,23 @@ function getCutoffDate(range: RangeKey): string {
   return now.toISOString().slice(0, 10);
 }
 
-function formatMarketCapCompact(val: number): string {
+function formatValueCompact(val: number, isMarketCap: boolean): string {
   if (!Number.isFinite(val)) return '-';
-  if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
-  if (val >= 1e9) return `$${(val / 1e9).toFixed(1)}B`;
-  if (val >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
-  return `$${val.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  if (isMarketCap) {
+    if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
+    if (val >= 1e9) return `$${(val / 1e9).toFixed(1)}B`;
+    if (val >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
+  }
+  return `$${val.toLocaleString('en-US', {
+    minimumFractionDigits: val < 1 ? 4 : 2,
+    maximumFractionDigits: val < 1 ? 4 : 2,
+  })}`;
 }
 
 export default function HistoryChart2000({ ticker }: { ticker: string }) {
   const [points, setPoints] = useState<HistoryPoint[]>([]);
   const [range, setRange] = useState<RangeKey>('ALL');
+  const [metricMode, setMetricMode] = useState<MetricMode>('auto');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,7 +85,7 @@ export default function HistoryChart2000({ ticker }: { ticker: string }) {
       })
       .catch((err: Error) => {
         if (!active) return;
-        setError(err.message || '시가총액 히스토리를 불러오지 못했습니다.');
+        setError(err.message || '히스토리 데이터를 불러오지 못했습니다.');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -90,39 +96,74 @@ export default function HistoryChart2000({ ticker }: { ticker: string }) {
     };
   }, [ticker]);
 
-  const { chartData, summary } = useMemo(() => {
+  const { chartData, summary, activeMetric, fallbackNotice } = useMemo(() => {
     const cutoff = getCutoffDate(range);
-    const valid = points
+    const inRange = points.filter(
+      (p) => typeof p.date === 'string' && p.date >= cutoff
+    );
+
+    const mcapSeries = inRange
       .filter(
         (p) =>
-          typeof p.date === 'string' &&
-          p.date >= cutoff &&
           typeof p.market_cap_usd === 'number' &&
           Number.isFinite(p.market_cap_usd) &&
           p.market_cap_usd > 0
       )
-      .map((p) => ({
-        date: p.date,
-        marketCap: Number(p.market_cap_usd),
-      }));
+      .map((p) => ({ date: p.date, value: Number(p.market_cap_usd) }));
+
+    const priceSeries = inRange
+      .filter(
+        (p) =>
+          typeof p.price_usd === 'number' &&
+          Number.isFinite(p.price_usd) &&
+          p.price_usd > 0
+      )
+      .map((p) => ({ date: p.date, value: Number(p.price_usd) }));
+
+    let chosenMetric: 'market_cap_usd' | 'price_usd' = 'market_cap_usd';
+    let valid = mcapSeries;
+    let notice: string | null = null;
+
+    if (metricMode === 'price_usd') {
+      chosenMetric = 'price_usd';
+      valid = priceSeries;
+    } else if (metricMode === 'market_cap_usd') {
+      chosenMetric = 'market_cap_usd';
+      valid = mcapSeries;
+    } else {
+      // auto: 시총 데이터가 있으면 시총, 없으면 주가로 자동 표시
+      if (mcapSeries.length > 0) {
+        chosenMetric = 'market_cap_usd';
+        valid = mcapSeries;
+      } else if (priceSeries.length > 0) {
+        chosenMetric = 'price_usd';
+        valid = priceSeries;
+        notice = '시가총액(shares_outstanding) 미연동 구간이라 주가(USD) 차트로 표시 중입니다.';
+      }
+    }
 
     if (valid.length === 0) {
-      return { chartData: [], summary: null };
+      return {
+        chartData: [],
+        summary: null,
+        activeMetric: chosenMetric,
+        fallbackNotice: notice,
+      };
     }
 
-    const firstVal = valid[0].marketCap;
-    const lastVal = valid[valid.length - 1].marketCap;
+    const firstVal = valid[0].value;
+    const lastVal = valid[valid.length - 1].value;
     const changePct = firstVal > 0 ? ((lastVal - firstVal) / firstVal) * 100 : 0;
-    let highVal = valid[0].marketCap;
-    let lowVal = valid[0].marketCap;
+    let highVal = valid[0].value;
+    let lowVal = valid[0].value;
 
     for (const item of valid) {
-      if (item.marketCap > highVal) highVal = item.marketCap;
-      if (item.marketCap < lowVal) lowVal = item.marketCap;
+      if (item.value > highVal) highVal = item.value;
+      if (item.value < lowVal) lowVal = item.value;
     }
 
-    // 2000년 전체(ALL) 구간에서 포인트가 너무 많으면 렌더링 부담을 줄이기 위해 간격 샘플링
-    const step = range === 'ALL' && valid.length > 2500 ? Math.ceil(valid.length / 2000) : 1;
+    const step =
+      range === 'ALL' && valid.length > 2500 ? Math.ceil(valid.length / 2000) : 1;
     const sampled =
       step === 1
         ? valid
@@ -136,13 +177,15 @@ export default function HistoryChart2000({ ticker }: { ticker: string }) {
         high: highVal,
         low: lowVal,
       },
+      activeMetric: chosenMetric,
+      fallbackNotice: notice,
     };
-  }, [points, range]);
+  }, [points, range, metricMode]);
 
   if (loading) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-        {ticker} 시가총액 히스토리 차트 로딩 중...
+        {ticker} 히스토리 차트 로딩 중...
       </div>
     );
   }
@@ -150,22 +193,24 @@ export default function HistoryChart2000({ ticker }: { ticker: string }) {
   if (error || chartData.length === 0 || !summary) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-6 text-sm text-amber-700">
-        {error || `${ticker}의 선택 기간 시가총액 데이터가 아직 없습니다.`}
+        {error || `${ticker}의 선택 기간 데이터가 아직 없습니다.`}
       </div>
     );
   }
 
+  const isMarketCap = activeMetric === 'market_cap_usd';
   const isPositive = summary.changePct >= 0;
 
   return (
     <div className="w-full rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      {/* 상단: 제목 + 기간 전환 버튼(1년 / 5년 / 10년 / 2000~현재) */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-medium text-slate-500">시가총액 추이 (USD)</div>
+          <div className="text-xs font-medium text-slate-500">
+            {isMarketCap ? '시가총액 추이 (USD)' : '주가 추이 (USD)'}
+          </div>
           <div className="mt-0.5 flex items-baseline gap-2.5">
             <span className="text-2xl font-bold text-slate-900">
-              {formatMarketCapCompact(summary.latest)}
+              {formatValueCompact(summary.latest, isMarketCap)}
             </span>
             <span
               className={`text-sm font-semibold ${
@@ -177,35 +222,83 @@ export default function HistoryChart2000({ ticker }: { ticker: string }) {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
-          {RANGE_OPTIONS.map((opt) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
             <button
-              key={opt.key}
               type="button"
-              onClick={() => setRange(opt.key)}
-              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-                range === opt.key
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-white/70 hover:text-slate-900'
+              onClick={() => setMetricMode('auto')}
+              className={`rounded-md px-2.5 py-1.5 text-xs font-semibold ${
+                metricMode === 'auto'
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              {opt.label}
+              자동
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => setMetricMode('market_cap_usd')}
+              className={`rounded-md px-2.5 py-1.5 text-xs font-semibold ${
+                metricMode === 'market_cap_usd'
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              시가총액
+            </button>
+            <button
+              type="button"
+              onClick={() => setMetricMode('price_usd')}
+              className={`rounded-md px-2.5 py-1.5 text-xs font-semibold ${
+                metricMode === 'price_usd'
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              주가
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
+            {RANGE_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setRange(opt.key)}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                  range === opt.key
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-white/70 hover:text-slate-900'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* 선택 기간 최고/최저 시총 요약 */}
+      {fallbackNotice && (
+        <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          {fallbackNotice}
+        </div>
+      )}
+
       <div className="mb-4 flex flex-wrap gap-4 border-y border-slate-100 py-2 text-xs text-slate-500">
         <span>
-          기간 최고: <strong className="text-slate-700">{formatMarketCapCompact(summary.high)}</strong>
+          기간 최고:{' '}
+          <strong className="text-slate-700">
+            {formatValueCompact(summary.high, isMarketCap)}
+          </strong>
         </span>
         <span>
-          기간 최저: <strong className="text-slate-700">{formatMarketCapCompact(summary.low)}</strong>
+          기간 최저:{' '}
+          <strong className="text-slate-700">
+            {formatValueCompact(summary.low, isMarketCap)}
+          </strong>
         </span>
       </div>
 
-      {/* 시가총액 영역 차트 */}
       <div className="h-80 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
@@ -214,16 +307,19 @@ export default function HistoryChart2000({ ticker }: { ticker: string }) {
             <YAxis
               tick={{ fontSize: 11 }}
               domain={['auto', 'auto']}
-              tickFormatter={(v) => formatMarketCapCompact(Number(v))}
+              tickFormatter={(v) => formatValueCompact(Number(v), isMarketCap)}
               width={74}
             />
             <Tooltip
-              formatter={(val: unknown) => [formatMarketCapCompact(Number(val)), '시가총액']}
+              formatter={(val: unknown) => [
+                formatValueCompact(Number(val), isMarketCap),
+                isMarketCap ? '시가총액' : '주가',
+              ]}
               labelFormatter={(label) => `날짜: ${label}`}
             />
             <Area
               type="monotone"
-              dataKey="marketCap"
+              dataKey="value"
               stroke={isPositive ? '#059669' : '#e11d48'}
               fill={isPositive ? '#6ee7b7' : '#fda4af'}
               fillOpacity={0.22}
