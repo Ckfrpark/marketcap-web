@@ -121,6 +121,10 @@ const COUNTRY_NAMES: Record<string, string> = {
   MX: 'Mexico',
   ES: 'Spain',
   IT: 'Italy',
+  AE: 'United Arab Emirates',
+  BE: 'Belgium',
+  FI: 'Finland',
+  NO_ALT: 'Norway',
 };
 
 function formatCountryLabel(countryCode?: string | null): string {
