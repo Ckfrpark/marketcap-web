@@ -353,6 +353,12 @@ export default function HomePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/fx"
+              className="rounded-lg border border-indigo-500/40 bg-indigo-600/20 px-3 py-1.5 text-xs font-semibold text-indigo-300 transition hover:bg-indigo-600/35"
+            >
+              환율 차트 (2000~)
+            </Link>
             {(['USD', 'KRW', 'EUR', 'JPY', 'CNY'] as CurrencyCode[]).map((curr) => (
               <button
                 key={curr}
@@ -467,94 +473,4 @@ export default function HomePage() {
                   <th className="px-4 py-3.5">자산명</th>
                   <th className="px-4 py-3.5">국가</th>
                   <th className="px-4 py-3.5 text-right">주가</th>
-                  <th className="px-4 py-3.5 text-right">시가총액 ({currency})</th>
-                  <th className="px-4 py-3.5 text-right">24H</th>
-                  <th className="px-4 py-3.5 text-center">30D</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/70">
-                {filteredAndSortedItems.slice(0, 200).map((item, idx) => {
-                  const change = Number(item.change_pct || 0);
-                  const isPos = change >= 0;
-                  return (
-                    <tr
-                      key={`${item.asset_type}-${item.ticker}-${idx}`}
-                      className="transition hover:bg-slate-800/40"
-                    >
-                      <td className="px-4 py-3.5 font-medium text-slate-400">{idx + 1}</td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <div>
-                            <Link
-                              href={`/asset/${encodeURIComponent(item.asset_type || 'STOCK')}/${encodeURIComponent(item.ticker)}`}
-                              className="font-semibold text-white hover:text-indigo-400"
-                            >
-                              {item.name}
-                            </Link>
-                            <div className="text-xs text-slate-400">{item.ticker}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5 text-slate-200">
-                        {getCountryLabel(item.country_code)}
-                      </td>
-                      <td className="px-4 py-3.5 text-right font-medium text-slate-100">
-                        {formatPrice(item.price_usd, currency, snapshot?.fx_rates)}
-                      </td>
-                      <td className="px-4 py-3.5 text-right font-semibold text-white">
-                        {formatCompactMoney(item.market_cap_usd, currency, snapshot?.fx_rates)}
-                      </td>
-                      <td
-                        className={`px-4 py-3.5 text-right font-medium ${
-                          isPos ? 'text-emerald-400' : 'text-rose-400'
-                        }`}
-                      >
-                        {isPos ? `+${change.toFixed(2)}%` : `${change.toFixed(2)}%`}
-                      </td>
-                      <td
-                        className="cursor-pointer px-4 py-3.5 text-center"
-                        onClick={() => setChartModalTarget({ ticker: item.ticker, name: item.name })}
-                        title="히스토리 차트 보기"
-                      >
-                        <Sparkline data={item.sparkline_30d} positive={isPos} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {chartModalTarget && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
-            onClick={() => setChartModalTarget(null)}
-          >
-            <div
-              className="w-full max-w-3xl rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-bold text-white">
-                    {chartModalTarget.name} ({chartModalTarget.ticker})
-                  </h2>
-                  <p className="text-xs text-slate-400">히스토리 추이</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setChartModalTarget(null)}
-                  className="rounded-lg border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800"
-                >
-                  닫기
-                </button>
-              </div>
-              <HistoryChart2000 ticker={chartModalTarget.ticker} />
-            </div>
-          </div>
-        )}
-      </div>
-    </main>
-  );
-}
+                  <th className="px-4 py-3
