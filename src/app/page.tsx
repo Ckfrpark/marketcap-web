@@ -151,7 +151,11 @@ function matchCategory(item: RankingItem, category: string): boolean {
   return rule.keywords.some((kw) => haystack.includes(kw.toLowerCase()));
 }
 
-function formatCompactMoney(usdValue: number | null | undefined, currency: CurrencyCode, fxRates?: Record<string, number>): string {
+function formatCompactMoney(
+  usdValue: number | null | undefined,
+  currency: CurrencyCode,
+  fxRates?: Record<string, number>
+): string {
   if (usdValue === null || usdValue === undefined || !Number.isFinite(Number(usdValue))) {
     return '-';
   }
@@ -168,13 +172,26 @@ function formatCompactMoney(usdValue: number | null | undefined, currency: Curre
   };
   const sym = symbolMap[currency] || '$';
 
-  if (abs >= 1e12) return `${sign}${sym}${(abs / 1e12).toFixed(2)} tril`;
-  if (abs >= 1e9) return `${sign}${sym}${(abs / 1e9).toFixed(0)} bil`;
-  if (abs >= 1e6) return `${sign}${sym}${(abs / 1e6).toFixed(1)} mil`;
+  if (abs >= 1e9) {
+    const billions = abs / 1e9;
+    const formattedBillions =
+      billions >= 100
+        ? billions.toLocaleString(undefined, { maximumFractionDigits: 0 })
+        : billions.toLocaleString(undefined, { maximumFractionDigits: 1 });
+    return `${sign}${sym}${formattedBillions} Billion`;
+  }
+  if (abs >= 1e6) {
+    const millions = abs / 1e6;
+    return `${sign}${sym}${millions.toLocaleString(undefined, { maximumFractionDigits: 1 })} Million`;
+  }
   return `${sign}${sym}${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
-function formatPrice(usdValue: number | null | undefined, currency: CurrencyCode, fxRates?: Record<string, number>): string {
+function formatPrice(
+  usdValue: number | null | undefined,
+  currency: CurrencyCode,
+  fxRates?: Record<string, number>
+): string {
   if (usdValue === null || usdValue === undefined || !Number.isFinite(Number(usdValue))) {
     return '-';
   }
@@ -285,192 +302,4 @@ export default function HomePage() {
     for (const item of snapshot?.rankings || []) {
       const code = String(item.country_code || '').trim().toUpperCase();
       if (code) {
-        counts[code] = (counts[code] || 0) + 1;
-      }
-    }
-    return Object.entries(counts)
-      .map(([code, count]) => ({
-        code,
-        count,
-        label: getCountryLabel(code),
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label) || b.count - a.count);
-  }, [snapshot]);
-
-  const filteredAndSortedItems = useMemo(() => {
-    const list = snapshot?.rankings || [];
-    const q = search.trim().toLowerCase();
-
-    const filtered = list.filter((item) => {
-      if (assetFilter !== 'ALL' && item.asset_type !== assetFilter) {
-        return false;
-      }
-      if (country !== 'ALL') {
-        const itemCountry = String(item.country_code || '').trim().toUpperCase();
-        if (itemCountry !== country) return false;
-      }
-      if (!matchCategory(item, category)) {
-        return false;
-      }
-      if (q) {
-        const nameMatch = String(item.name || '').toLowerCase().includes(q);
-        const tickerMatch = String(item.ticker || '').toLowerCase().includes(q);
-        const countryLabelMatch = getCountryLabel(item.country_code).toLowerCase().includes(q);
-        if (!nameMatch && !tickerMatch && !countryLabelMatch) return false;
-      }
-      return true;
-    });
-
-    if (rankBy === 'market_cap_usd') {
-      return [...filtered].sort(
-        (a, b) => Number(b.market_cap_usd || 0) - Number(a.market_cap_usd || 0)
-      );
-    }
-
-    return [...filtered].sort((a, b) => {
-      const av = a[rankBy];
-      const bv = b[rankBy];
-      const aValid = av !== null && av !== undefined && Number.isFinite(Number(av));
-      const bValid = bv !== null && bv !== undefined && Number.isFinite(Number(bv));
-      if (!aValid && !bValid) return 0;
-      if (!aValid) return 1;
-      if (!bValid) return -1;
-      return Number(bv) - Number(av);
-    });
-  }, [snapshot, assetFilter, country, category, search, rankBy]);
-
-  return (
-    <main className="min-h-screen bg-[#070b14] text-slate-100">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              Global Market Cap Rankings
-            </h1>
-            <p className="mt-1 text-sm text-slate-400">
-              기준일: {snapshot?.date || '-'} · 총 자산: {(snapshot?.total_assets || 0).toLocaleString()}개
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/fx"
-              className="rounded-lg border border-indigo-500/40 bg-indigo-600/20 px-3 py-1.5 text-xs font-semibold text-indigo-300 transition hover:bg-indigo-600/35"
-            >
-              환율 차트 (2000~)
-            </Link>
-            {(['USD', 'KRW', 'EUR', 'JPY', 'CNY'] as CurrencyCode[]).map((curr) => (
-              <button
-                key={curr}
-                type="button"
-                onClick={() => setCurrency(curr)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                  currency === curr
-                    ? 'bg-indigo-600 text-white'
-                    : 'border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800'
-                }`}
-              >
-                {curr}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800/80 bg-slate-900/60 p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {(
-              [
-                { key: 'ALL', label: '전체 자산' },
-                { key: 'STOCK', label: '주식 (Stocks)' },
-                { key: 'ETF', label: 'ETF' },
-                { key: 'CRYPTO', label: '암호화폐 (Crypto)' },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setAssetFilter(tab.key)}
-                className={`rounded-lg px-3.5 py-2 text-sm font-medium transition ${
-                  assetFilter === tab.key
-                    ? 'bg-white text-slate-950 font-semibold'
-                    : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            <select
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              aria-label="By country"
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
-            >
-              <option value="ALL">By country</option>
-              {countryOptions.map((opt) => (
-                <option key={opt.code} value={opt.code}>
-                  {opt.label} ({opt.count})
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              aria-label="Ranking by categories"
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
-            >
-              {CATEGORY_RULES.map((rule) => (
-                <option key={rule.label} value={rule.label}>
-                  {rule.label}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={rankBy}
-              onChange={(e) => setRankBy(e.target.value as RankMetricKey)}
-              aria-label="Rank metric"
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
-            >
-              {RANK_METRICS.map((m) => (
-                <option key={m.key} value={m.key}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="종목명 또는 티커 검색..."
-              className="w-56 rounded-lg border border-slate-700 bg-slate-900 px-3.5 py-2 text-sm text-white placeholder-slate-400 focus:border-indigo-500 focus:outline-none"
-            />
-          </div>
-        </div>
-
-        {loading && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-10 text-center text-sm text-slate-400">
-            랭킹 데이터를 불러오는 중입니다...
-          </div>
-        )}
-
-        {!loading && errorMsg && (
-          <div className="rounded-xl border border-rose-900/60 bg-rose-950/30 p-6 text-sm text-rose-300">
-            {errorMsg}
-          </div>
-        )}
-
-        {!loading && !errorMsg && (
-          <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/40">
-            <table className="w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-800 bg-slate-900/90 text-xs uppercase tracking-wider text-slate-400">
-                  <th className="px-4 py-3.5">#</th>
-                  <th className="px-4 py-3.5">자산명</th>
-                  <th className="px-4 py-3.5">국가</th>
-                  <th className="px-4 py-3.5 text-right">주가</th>
-                  <th className="px-4 py-3
+        counts[code] = (counts[code] ||
