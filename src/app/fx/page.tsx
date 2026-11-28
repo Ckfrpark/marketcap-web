@@ -12,6 +12,7 @@ interface RankingAsset {
 
 interface LatestSnapshot {
   date?: string;
+  fx_rates?: Record<string, number>;
   rankings?: RankingAsset[];
 }
 
@@ -28,83 +29,44 @@ const R2_BASE_URL = (
   ''
 ).replace(/\/$/, '');
 
-const COUNTRY_TO_CURRENCY: Record<string, { currency: string; countryName: string; fallbackRate: number }> = {
-  US: { currency: 'USD', countryName: 'United States', fallbackRate: 1 },
-  KR: { currency: 'KRW', countryName: 'South Korea', fallbackRate: 1400 },
-  JP: { currency: 'JPY', countryName: 'Japan', fallbackRate: 155 },
-  CN: { currency: 'CNY', countryName: 'China', fallbackRate: 7.2 },
-  GB: { currency: 'GBP', countryName: 'United Kingdom', fallbackRate: 0.79 },
-  UK: { currency: 'GBP', countryName: 'United Kingdom', fallbackRate: 0.79 },
-  DE: { currency: 'EUR', countryName: 'Germany', fallbackRate: 0.92 },
-  FR: { currency: 'EUR', countryName: 'France', fallbackRate: 0.92 },
-  NL: { currency: 'EUR', countryName: 'Netherlands', fallbackRate: 0.92 },
-  ES: { currency: 'EUR', countryName: 'Spain', fallbackRate: 0.92 },
-  IT: { currency: 'EUR', countryName: 'Italy', fallbackRate: 0.92 },
-  IE: { currency: 'EUR', countryName: 'Ireland', fallbackRate: 0.92 },
-  FI: { currency: 'EUR', countryName: 'Finland', fallbackRate: 0.92 },
-  BE: { currency: 'EUR', countryName: 'Belgium', fallbackRate: 0.92 },
-  TH: { currency: 'THB', countryName: 'Thailand', fallbackRate: 34.0 },
-  MX: { currency: 'MXN', countryName: 'Mexico', fallbackRate: 19.65 },
-  ZA: { currency: 'ZAR', countryName: 'South Africa', fallbackRate: 17.5 },
-  IN: { currency: 'INR', countryName: 'India', fallbackRate: 84.0 },
-  TW: { currency: 'TWD', countryName: 'Taiwan', fallbackRate: 32.5 },
-  HK: { currency: 'HKD', countryName: 'Hong Kong', fallbackRate: 7.8 },
-  SG: { currency: 'SGD', countryName: 'Singapore', fallbackRate: 1.34 },
-  AU: { currency: 'AUD', countryName: 'Australia', fallbackRate: 1.53 },
-  CA: { currency: 'CAD', countryName: 'Canada', fallbackRate: 1.39 },
-  CH: { currency: 'CHF', countryName: 'Switzerland', fallbackRate: 0.88 },
-  SE: { currency: 'SEK', countryName: 'Sweden', fallbackRate: 10.6 },
-  NO: { currency: 'NOK', countryName: 'Norway', fallbackRate: 11.0 },
-  DK: { currency: 'DKK', countryName: 'Denmark', fallbackRate: 6.9 },
-  BR: { currency: 'BRL', countryName: 'Brazil', fallbackRate: 5.8 },
-  CL: { currency: 'CLP', countryName: 'Chile', fallbackRate: 970.0 },
-  SA: { currency: 'SAR', countryName: 'Saudi Arabia', fallbackRate: 3.75 },
-  IL: { currency: 'ILS', countryName: 'Israel', fallbackRate: 3.65 },
-  TR: { currency: 'TRY', countryName: 'Turkey', fallbackRate: 34.5 },
-  ID: { currency: 'IDR', countryName: 'Indonesia', fallbackRate: 15800.0 },
-  MY: { currency: 'MYR', countryName: 'Malaysia', fallbackRate: 4.45 },
+// 1 USD = localPerUsd 기준 메타데이터
+const COUNTRY_TO_CURRENCY: Record<string, { currency: string; countryName: string; localPerUsd: number }> = {
+  US: { currency: 'USD', countryName: 'United States', localPerUsd: 1 },
+  KR: { currency: 'KRW', countryName: 'South Korea', localPerUsd: 1400 },
+  JP: { currency: 'JPY', countryName: 'Japan', localPerUsd: 155 },
+  CN: { currency: 'CNY', countryName: 'China', localPerUsd: 7.2 },
+  GB: { currency: 'GBP', countryName: 'United Kingdom', localPerUsd: 0.79 },
+  UK: { currency: 'GBP', countryName: 'United Kingdom', localPerUsd: 0.79 },
+  DE: { currency: 'EUR', countryName: 'Germany', localPerUsd: 0.92 },
+  FR: { currency: 'EUR', countryName: 'France', localPerUsd: 0.92 },
+  NL: { currency: 'EUR', countryName: 'Netherlands', localPerUsd: 0.92 },
+  ES: { currency: 'EUR', countryName: 'Spain', localPerUsd: 0.92 },
+  IT: { currency: 'EUR', countryName: 'Italy', localPerUsd: 0.92 },
+  IE: { currency: 'EUR', countryName: 'Ireland', localPerUsd: 0.92 },
+  FI: { currency: 'EUR', countryName: 'Finland', localPerUsd: 0.92 },
+  BE: { currency: 'EUR', countryName: 'Belgium', localPerUsd: 0.92 },
+  TH: { currency: 'THB', countryName: 'Thailand', localPerUsd: 34.0 },
+  MX: { currency: 'MXN', countryName: 'Mexico', localPerUsd: 19.65 },
+  ZA: { currency: 'ZAR', countryName: 'South Africa', localPerUsd: 17.5 },
+  IN: { currency: 'INR', countryName: 'India', localPerUsd: 84.0 },
+  TW: { currency: 'TWD', countryName: 'Taiwan', localPerUsd: 32.5 },
+  HK: { currency: 'HKD', countryName: 'Hong Kong', localPerUsd: 7.8 },
+  SG: { currency: 'SGD', countryName: 'Singapore', localPerUsd: 1.34 },
+  AU: { currency: 'AUD', countryName: 'Australia', localPerUsd: 1.53 },
+  CA: { currency: 'CAD', countryName: 'Canada', localPerUsd: 1.39 },
+  CH: { currency: 'CHF', countryName: 'Switzerland', localPerUsd: 0.88 },
+  SE: { currency: 'SEK', countryName: 'Sweden', localPerUsd: 10.6 },
+  NO: { currency: 'NOK', countryName: 'Norway', localPerUsd: 11.0 },
+  DK: { currency: 'DKK', countryName: 'Denmark', localPerUsd: 6.9 },
+  BR: { currency: 'BRL', countryName: 'Brazil', localPerUsd: 5.8 },
+  CL: { currency: 'CLP', countryName: 'Chile', localPerUsd: 970.0 },
+  SA: { currency: 'SAR', countryName: 'Saudi Arabia', localPerUsd: 3.75 },
+  IL: { currency: 'ILS', countryName: 'Israel', localPerUsd: 3.65 },
+  TR: { currency: 'TRY', countryName: 'Turkey', localPerUsd: 34.5 },
+  ID: { currency: 'IDR', countryName: 'Indonesia', localPerUsd: 15800.0 },
+  MY: { currency: 'MYR', countryName: 'Malaysia', localPerUsd: 4.45 },
+  BM: { currency: 'USD', countryName: 'Bermuda', localPerUsd: 1 },
 };
-
-function generateSeriesFrom2000(currency: string, fallbackRate: number): FxPoint[] {
-  const start = new Date('2000-01-01T00:00:00Z');
-  const end = new Date();
-  const points: FxPoint[] = [];
-
-  if (currency === 'USD') {
-    const stepDays = 30;
-    for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + stepDays)) {
-      points.push({ date: d.toISOString().slice(0, 10), rate: 1 });
-    }
-    return points;
-  }
-
-  let seed = 0;
-  for (let i = 0; i < currency.length; i++) {
-    seed += currency.charCodeAt(i) * (i + 17);
-  }
-
-  const totalDays = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 86400000));
-  const stepDays = 14; // 2주 간격 약 700개 포인트로 2000년~현재 전체 곡선 표현
-
-  for (let day = 0; day <= totalDays; day += stepDays) {
-    const dt = new Date(start.getTime() + day * 86400000);
-    const progress = day / totalDays;
-    const wave1 = Math.sin((day / 365.25) * Math.PI * 2 + seed) * 0.08;
-    const wave2 = Math.cos((day / 1461) * Math.PI * 2 + seed * 0.5) * 0.06;
-    const drift = (progress - 0.5) * 0.14;
-    const factor = Math.max(0.45, 1 + wave1 + wave2 + drift);
-    points.push({
-      date: dt.toISOString().slice(0, 10),
-      rate: Number((fallbackRate * factor).toFixed(4)),
-    });
-  }
-
-  const todayStr = end.toISOString().slice(0, 10);
-  if (points.length === 0 || points[points.length - 1].date !== todayStr) {
-    points.push({ date: todayStr, rate: fallbackRate });
-  }
-  return points;
-}
 
 function FxLineChart({ points }: { points: FxPoint[] }) {
   if (!points.length) {
@@ -117,7 +79,7 @@ function FxLineChart({ points }: { points: FxPoint[] }) {
 
   const width = 960;
   const height = 340;
-  const padLeft = 72;
+  const padLeft = 76;
   const padRight = 24;
   const padTop = 24;
   const padBottom = 42;
@@ -125,7 +87,7 @@ function FxLineChart({ points }: { points: FxPoint[] }) {
   const values = points.map((p) => p.rate);
   const minVal = Math.min(...values);
   const maxVal = Math.max(...values);
-  const span = maxVal - minVal || 1;
+  const span = maxVal - minVal || Math.max(maxVal * 0.05, 0.01);
 
   const plotW = width - padLeft - padRight;
   const plotH = height - padTop - padBottom;
@@ -210,9 +172,10 @@ function FxLineChart({ points }: { points: FxPoint[] }) {
 
 export default function FxRatesPage() {
   const [snapshot, setSnapshot] = useState<LatestSnapshot | null>(null);
-  const [selectedCountry, setSelectedCountry] = useState<string>('TH');
+  const [selectedCountry, setSelectedCountry] = useState<string>('KR');
   const [range, setRange] = useState<RangeKey>('ALL');
   const [fxJsonSeries, setFxJsonSeries] = useState<FxPoint[] | null>(null);
+  const [isRealSeries, setIsRealSeries] = useState<boolean>(false);
 
   useEffect(() => {
     let active = true;
@@ -243,34 +206,45 @@ export default function FxRatesPage() {
         const meta = COUNTRY_TO_CURRENCY[code] || {
           currency: 'USD',
           countryName: code,
-          fallbackRate: 1,
+          localPerUsd: 1,
         };
         return {
           code,
           count: counts[code] || 0,
           countryName: meta.countryName,
           currency: meta.currency,
-          fallbackRate: meta.fallbackRate,
+          localPerUsd: meta.localPerUsd,
         };
       })
       .sort((a, b) => b.count - a.count || a.countryName.localeCompare(b.countryName));
   }, [snapshot]);
 
   const activeMeta = useMemo(() => {
-    return (
-      countryList.find((c) => c.code === selectedCountry) || {
-        code: selectedCountry,
-        count: 0,
-        countryName: COUNTRY_TO_CURRENCY[selectedCountry]?.countryName || selectedCountry,
-        currency: COUNTRY_TO_CURRENCY[selectedCountry]?.currency || 'USD',
-        fallbackRate: COUNTRY_TO_CURRENCY[selectedCountry]?.fallbackRate || 1,
-      }
-    );
-  }, [countryList, selectedCountry]);
+    const found = countryList.find((c) => c.code === selectedCountry);
+    const baseMeta = found || {
+      code: selectedCountry,
+      count: 0,
+      countryName: COUNTRY_TO_CURRENCY[selectedCountry]?.countryName || selectedCountry,
+      currency: COUNTRY_TO_CURRENCY[selectedCountry]?.currency || 'USD',
+      localPerUsd: COUNTRY_TO_CURRENCY[selectedCountry]?.localPerUsd || 1,
+    };
+
+    // snapshot.fx_rates 에 USD당 단가(usdPerUnit)가 있는 경우 1 / usdPerUnit 으로 환산
+    const snapRate = snapshot?.fx_rates?.[baseMeta.currency];
+    if (baseMeta.currency !== 'USD' && typeof snapRate === 'number' && snapRate > 0) {
+      const derivedLocalPerUsd = snapRate < 0.2 ? 1 / snapRate : snapRate;
+      return {
+        ...baseMeta,
+        localPerUsd: Number(derivedLocalPerUsd.toFixed(4)),
+      };
+    }
+    return baseMeta;
+  }, [countryList, selectedCountry, snapshot]);
 
   useEffect(() => {
     let active = true;
     setFxJsonSeries(null);
+    setIsRealSeries(false);
     const base = R2_BASE_URL || '';
     if (!base) return;
 
@@ -282,18 +256,15 @@ export default function FxRatesPage() {
         if (!active || !data) return;
         if (Array.isArray(data.series)) {
           const parsed = data.series
-            .filter((item: { date?: string; rate?: number }) => item.date && Number.isFinite(Number(item.rate)))
+            .filter((item: { date?: string; rate?: number }) => item.date && Number.isFinite(Number(item.rate)) && Number(item.rate) > 0)
             .map((item: { date: string; rate: number }) => ({
               date: String(item.date),
               rate: Number(item.rate),
             }));
-          if (parsed.length > 0) setFxJsonSeries(parsed);
-        } else if (data.rates && typeof data.rates === 'object') {
-          const parsed = Object.entries(data.rates)
-            .filter(([, v]) => Number.isFinite(Number(v)))
-            .map(([date, v]) => ({ date, rate: Number(v) }))
-            .sort((a, b) => a.date.localeCompare(b.date));
-          if (parsed.length > 0) setFxJsonSeries(parsed);
+          if (parsed.length > 0) {
+            setFxJsonSeries(parsed);
+            setIsRealSeries(true);
+          }
         }
       })
       .catch(() => {});
@@ -307,8 +278,12 @@ export default function FxRatesPage() {
     if (fxJsonSeries && fxJsonSeries.length > 0) {
       return fxJsonSeries.filter((p) => p.date >= '2000-01-01');
     }
-    return generateSeriesFrom2000(activeMeta.currency, activeMeta.fallbackRate);
-  }, [fxJsonSeries, activeMeta.currency, activeMeta.fallbackRate]);
+    const snapDate = snapshot?.date || new Date().toISOString().slice(0, 10);
+    return [
+      { date: '2000-01-01', rate: activeMeta.localPerUsd },
+      { date: snapDate, rate: activeMeta.localPerUsd },
+    ];
+  }, [fxJsonSeries, activeMeta.localPerUsd, snapshot?.date]);
 
   const filteredSeries = useMemo(() => {
     if (range === 'ALL') return fullSeries;
@@ -340,7 +315,7 @@ export default function FxRatesPage() {
               국가별 환율 추이 (2000-01-01 ~ 현재)
             </h1>
             <p className="mt-1 text-sm text-slate-400">
-              스냅샷 등록 종목 국가 기준 통화 환율(1 USD 당 현지 통화) 시계열 차트
+              스냅샷 등록 종목 국가 기준 통화 환율(1 USD 당 현지 통화) · 기준일 {snapshot?.date || '-'}
             </p>
           </div>
 
@@ -361,6 +336,12 @@ export default function FxRatesPage() {
             ))}
           </div>
         </div>
+
+        {!isRealSeries && (
+          <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-xs text-amber-300">
+            R2에 <code>snapshots/fx/{activeMeta.currency}_2000.json</code> 실측 시계열 파일이 아직 업로드되지 않아 현재 기준 환율({activeMeta.localPerUsd.toLocaleString()} {activeMeta.currency})로 표시 중입니다.
+          </div>
+        )}
 
         <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
